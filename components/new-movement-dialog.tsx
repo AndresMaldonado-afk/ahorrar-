@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { Plus, Trash2, ListPlus, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import { useFinance } from '@/components/finance-provider'
-import { formatMoney, todayISO, type CategoryType, type Product } from '@/lib/finance-data'
+import { categoryEmojiOptions, formatMoney, todayISO, type CategoryType, type Product } from '@/lib/finance-data'
 import { cn } from '@/lib/utils'
 
 type Row = { id: string; name: string; price: string }
@@ -32,6 +32,7 @@ export function NewMovementDialog() {
   const [creatingCategory, setCreatingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryLimit, setNewCategoryLimit] = useState('')
+  const [newCategoryEmoji, setNewCategoryEmoji] = useState('')
   const [error, setError] = useState('')
 
   const filteredCategories = useMemo(
@@ -57,6 +58,7 @@ export function NewMovementDialog() {
     setCreatingCategory(false)
     setNewCategoryName('')
     setNewCategoryLimit('')
+    setNewCategoryEmoji('')
     setError('')
   }
 
@@ -80,11 +82,13 @@ export function NewMovementDialog() {
       name: newCategoryName,
       type,
       limit: Number.parseFloat(newCategoryLimit) || 0,
+      emoji: newCategoryEmoji || undefined,
     })
     setCategoryId(created.id)
     setCreatingCategory(false)
     setNewCategoryName('')
     setNewCategoryLimit('')
+    setNewCategoryEmoji('')
     setError('')
   }
 
@@ -181,6 +185,34 @@ export function NewMovementDialog() {
           )}
         </div>
 
+        {/* Title */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="title" className={labelClass}>
+            Título
+          </label>
+          <input
+            id="title"
+            placeholder={type === 'income' ? 'Ej. Nómina de septiembre' : 'Ej. Súper de la semana'}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+
+        {/* Date */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="date" className={labelClass}>
+            Fecha
+          </label>
+          <input
+            id="date"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+
         {/* Category */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="category" className={labelClass}>
@@ -228,6 +260,28 @@ export function NewMovementDialog() {
                   className={inputClass}
                 />
               )}
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-muted-foreground">Elige un emoji (opcional)</p>
+                <div className="grid grid-cols-6 gap-1.5">
+                  {categoryEmojiOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setNewCategoryEmoji((prev) => (prev === option ? '' : option))}
+                      aria-pressed={newCategoryEmoji === option}
+                      aria-label={`Usar emoji ${option}`}
+                      className={cn(
+                        'flex size-9 items-center justify-center rounded-xl text-base transition-colors',
+                        newCategoryEmoji === option
+                          ? 'bg-primary/15 ring-2 ring-primary'
+                          : 'bg-background hover:bg-muted',
+                      )}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -249,34 +303,6 @@ export function NewMovementDialog() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Date */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="date" className={labelClass}>
-            Fecha
-          </label>
-          <input
-            id="date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-
-        {/* Description */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="title" className={labelClass}>
-            Descripción
-          </label>
-          <input
-            id="title"
-            placeholder={type === 'income' ? 'Ej. Nómina de septiembre' : 'Ej. Súper de la semana'}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className={inputClass}
-          />
         </div>
 
         {/* Product breakdown toggle */}

@@ -31,6 +31,13 @@ export const categoryPalette = [
   'var(--chart-5)',
 ]
 
+/** Emoji choices offered when the user creates a new category. */
+export const categoryEmojiOptions = [
+  '🛒', '🏠', '🚌', '🎧', '💡', '🍽️', '🚗', '🏥', '🎓', '🎁',
+  '🐶', '👕', '📱', '💼', '✨', '☕', '🎮', '📚', '✈️', '🎬',
+  '🏋️', '🧴', '🐾', '🧾', '💰', '🛠️', '🎵', '🍎', '🚕', '🪙',
+]
+
 export type CategoryType = 'income' | 'expense'
 
 export type Category = {

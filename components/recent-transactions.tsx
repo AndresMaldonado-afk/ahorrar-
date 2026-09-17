@@ -48,7 +48,7 @@ export function RecentTransactions() {
                     <div>
                       <p className="text-sm font-semibold">{t.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        {category?.name ?? 'Sin categoría'} · {formatDate(t.date)}
+                        {category ? `${category.emoji} ${category.name}` : 'Sin categoría'} · {formatDate(t.date)}
                       </p>
                     </div>
                   </div>

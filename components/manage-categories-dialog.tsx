@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import { useFinance } from '@/components/finance-provider'
-import { formatMoney, type CategoryType } from '@/lib/finance-data'
+import { categoryEmojiOptions, formatMoney, type CategoryType } from '@/lib/finance-data'
 import { cn } from '@/lib/utils'
 
 export function ManageCategoriesDialog() {
@@ -13,6 +13,7 @@ export function ManageCategoriesDialog() {
   const [type, setType] = useState<CategoryType>('expense')
   const [name, setName] = useState('')
   const [limit, setLimit] = useState('')
+  const [emoji, setEmoji] = useState('')
   const [error, setError] = useState('')
 
   const inputClass =
@@ -23,9 +24,10 @@ export function ManageCategoriesDialog() {
       setError('Escribe un nombre para la categoría')
       return
     }
-    addCategory({ name, type, limit: Number.parseFloat(limit) || 0 })
+    addCategory({ name, type, limit: Number.parseFloat(limit) || 0, emoji: emoji || undefined })
     setName('')
     setLimit('')
+    setEmoji('')
     setError('')
   }
 
@@ -84,6 +86,28 @@ export function ManageCategoriesDialog() {
               className={inputClass}
             />
           )}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-muted-foreground">Elige un emoji (opcional)</p>
+            <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-10">
+              {categoryEmojiOptions.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setEmoji((prev) => (prev === option ? '' : option))}
+                  aria-pressed={emoji === option}
+                  aria-label={`Usar emoji ${option}`}
+                  className={cn(
+                    'flex size-9 items-center justify-center rounded-xl text-base transition-colors',
+                    emoji === option
+                      ? 'bg-primary/15 ring-2 ring-primary'
+                      : 'bg-background hover:bg-muted',
+                  )}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
           {error && (
             <p className="text-sm font-medium text-accent" role="alert">
               {error}
