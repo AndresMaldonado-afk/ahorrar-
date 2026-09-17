@@ -11,8 +11,10 @@ import {
   X,
   PiggyBank,
   Sparkles,
+  Plus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useFinance } from '@/components/finance-provider'
 
 const navItems = [
   { label: 'Inicio', icon: LayoutDashboard, active: true },
@@ -70,8 +72,27 @@ function ProTip() {
   )
 }
 
+function NewMovementButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5"
+    >
+      <Plus className="size-4" aria-hidden="true" />
+      Nuevo movimiento
+    </button>
+  )
+}
+
 export function DashboardNav() {
   const [open, setOpen] = useState(false)
+  const { setNewMovementOpen } = useFinance()
+
+  const openMovement = () => {
+    setOpen(false)
+    setNewMovementOpen(true)
+  }
 
   return (
     <>
@@ -81,7 +102,10 @@ export function DashboardNav() {
           <Brand />
           <NavLinks />
         </div>
-        <ProTip />
+        <div className="flex flex-col gap-3">
+          <NewMovementButton onClick={openMovement} />
+          <ProTip />
+        </div>
       </aside>
 
       {/* Mobile top bar */}
@@ -121,7 +145,10 @@ export function DashboardNav() {
               </div>
               <NavLinks onNavigate={() => setOpen(false)} />
             </div>
-            <ProTip />
+            <div className="flex flex-col gap-3">
+              <NewMovementButton onClick={openMovement} />
+              <ProTip />
+            </div>
           </div>
         </div>
       )}
