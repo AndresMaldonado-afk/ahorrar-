@@ -50,6 +50,8 @@ type FinanceContextValue = {
   loading: boolean
   error: string | null
   addCategory: (input: NewCategoryInput) => Promise<Category>
+  updateCategory: (id: string, input: NewCategoryInput) => Promise<Category>
+  deleteCategory: (id: string) => Promise<void>
   addTransaction: (input: NewTransactionInput) => Promise<void>
   getCategory: (id: string) => Category | undefined
   newMovementOpen: boolean
@@ -199,6 +201,46 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return category
   }
 
+  const updateCategory = async (id: string, input: NewCategoryInput) => {
+    if (!user) throw new Error('No hay sesión activa')
+    const monthlyLimit = input.type === 'expense' ? Math.max(0, input.limit) : 0
+    const existing = categories.find((c) => c.id === id)
+
+    const { data, error: updateError } = await supabase
+      .from('categories')
+      .update({
+        name: input.name.trim(),
+        type: input.type,
+        monthly_limit: monthlyLimit,
+        emoji: input.emoji || existing?.emoji,
+      })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select('id, name, type, monthly_limit, emoji, color')
+      .single()
+
+    if (updateError || !data) {
+      throw new Error('No se pudo actualizar la categoría. Intenta de nuevo.')
+    }
+
+    const updated = mapCategory(data)
+    setCategories((prev) => prev.map((c) => (c.id === id ? updated : c)))
+    return updated
+  }
+
+  const deleteCategory = async (id: string) => {
+    if (!user) throw new Error('No hay sesión activa')
+
+    const { error: deleteError } = await supabase.from('categories').delete().eq('id', id).eq('user_id', user.id)
+
+    if (deleteError) {
+      throw new Error('No se pudo eliminar la categoría. Intenta de nuevo.')
+    }
+
+    setCategories((prev) => prev.filter((c) => c.id !== id))
+    setTransactions((prev) => prev.filter((t) => t.categoryId !== id))
+  }
+
   const addTransaction = async (input: NewTransactionInput) => {
     if (!user) throw new Error('No hay sesión activa')
 
@@ -281,6 +323,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     loading,
     error,
     addCategory,
+    updateCategory,
+    deleteCategory,
     addTransaction,
     getCategory,
     newMovementOpen,

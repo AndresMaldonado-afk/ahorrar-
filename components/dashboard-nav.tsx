@@ -1,10 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   ArrowLeftRight,
+  Tags,
   Target,
   PieChart,
   Settings,
@@ -20,11 +22,12 @@ import { useFinance } from '@/components/finance-provider'
 import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
-  { label: 'Inicio', icon: LayoutDashboard, active: true },
-  { label: 'Movimientos', icon: ArrowLeftRight, active: false },
-  { label: 'Metas', icon: Target, active: false },
-  { label: 'Presupuesto', icon: PieChart, active: false },
-  { label: 'Ajustes', icon: Settings, active: false },
+  { label: 'Inicio', icon: LayoutDashboard, href: '/' },
+  { label: 'Categorías', icon: Tags, href: '/categorias' },
+  { label: 'Movimientos', icon: ArrowLeftRight, href: '#' },
+  { label: 'Metas', icon: Target, href: '#' },
+  { label: 'Presupuesto', icon: PieChart, href: '#' },
+  { label: 'Ajustes', icon: Settings, href: '#' },
 ]
 
 function Brand() {
@@ -41,25 +44,29 @@ function Brand() {
 }
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname()
   return (
     <nav className="flex flex-col gap-1.5" aria-label="Navegación principal">
-      {navItems.map((item) => (
-        <a
-          key={item.label}
-          href="#"
-          onClick={onNavigate}
-          aria-current={item.active ? 'page' : undefined}
-          className={cn(
-            'flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition-colors',
-            item.active
-              ? 'bg-secondary text-secondary-foreground'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-          )}
-        >
-          <item.icon className="size-5 shrink-0" aria-hidden="true" />
-          {item.label}
-        </a>
-      ))}
+      {navItems.map((item) => {
+        const active = item.href !== '#' && pathname === item.href
+        return (
+          <Link
+            key={item.label}
+            href={item.href}
+            onClick={onNavigate}
+            aria-current={active ? 'page' : undefined}
+            className={cn(
+              'flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition-colors',
+              active
+                ? 'bg-secondary text-secondary-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
+          >
+            <item.icon className="size-5 shrink-0" aria-hidden="true" />
+            {item.label}
+          </Link>
+        )
+      })}
     </nav>
   )
 }
