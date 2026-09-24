@@ -34,6 +34,7 @@ export function NewMovementDialog() {
   const [newCategoryLimit, setNewCategoryLimit] = useState('')
   const [newCategoryEmoji, setNewCategoryEmoji] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const filteredCategories = useMemo(
     () => categories.filter((c) => c.type === type),
@@ -73,26 +74,33 @@ export function NewMovementDialog() {
     setCreatingCategory(false)
   }
 
-  function handleCreateCategory() {
+  async function handleCreateCategory() {
     if (!newCategoryName.trim()) {
       setError('Escribe un nombre para la categoría')
       return
     }
-    const created = addCategory({
-      name: newCategoryName,
-      type,
-      limit: Number.parseFloat(newCategoryLimit) || 0,
-      emoji: newCategoryEmoji || undefined,
-    })
-    setCategoryId(created.id)
-    setCreatingCategory(false)
-    setNewCategoryName('')
-    setNewCategoryLimit('')
-    setNewCategoryEmoji('')
-    setError('')
+    setSubmitting(true)
+    try {
+      const created = await addCategory({
+        name: newCategoryName,
+        type,
+        limit: Number.parseFloat(newCategoryLimit) || 0,
+        emoji: newCategoryEmoji || undefined,
+      })
+      setCategoryId(created.id)
+      setCreatingCategory(false)
+      setNewCategoryName('')
+      setNewCategoryLimit('')
+      setNewCategoryEmoji('')
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear la categoría')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!categoryId) {
       setError('Elige una categoría')
@@ -112,15 +120,22 @@ export function NewMovementDialog() {
           price: Number.parseFloat(r.price),
         }))
     }
-    addTransaction({
-      type,
-      title,
-      categoryId,
-      amount: effectiveAmount,
-      date,
-      products,
-    })
-    close()
+    setSubmitting(true)
+    try {
+      await addTransaction({
+        type,
+        title,
+        categoryId,
+        amount: effectiveAmount,
+        date,
+        products,
+      })
+      close()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el movimiento')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const inputClass =
@@ -399,10 +414,11 @@ export function NewMovementDialog() {
           </button>
           <button
             type="submit"
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5"
+            disabled={submitting}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-70"
           >
             <Plus className="size-4" aria-hidden="true" />
-            Guardar movimiento
+            {submitting ? 'Guardando…' : 'Guardar movimiento'}
           </button>
         </div>
       </form>

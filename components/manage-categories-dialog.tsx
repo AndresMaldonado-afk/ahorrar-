@@ -15,20 +15,28 @@ export function ManageCategoriesDialog() {
   const [limit, setLimit] = useState('')
   const [emoji, setEmoji] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const inputClass =
     'w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm font-medium outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20'
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!name.trim()) {
       setError('Escribe un nombre para la categoría')
       return
     }
-    addCategory({ name, type, limit: Number.parseFloat(limit) || 0, emoji: emoji || undefined })
-    setName('')
-    setLimit('')
-    setEmoji('')
-    setError('')
+    setSubmitting(true)
+    try {
+      await addCategory({ name, type, limit: Number.parseFloat(limit) || 0, emoji: emoji || undefined })
+      setName('')
+      setLimit('')
+      setEmoji('')
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear la categoría')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const income = categories.filter((c) => c.type === 'income')
@@ -116,10 +124,11 @@ export function ManageCategoriesDialog() {
           <button
             type="button"
             onClick={handleAdd}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+            disabled={submitting}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:pointer-events-none disabled:opacity-70"
           >
             <Plus className="size-4" aria-hidden="true" />
-            Agregar categoría
+            {submitting ? 'Guardando…' : 'Agregar categoría'}
           </button>
         </div>
 

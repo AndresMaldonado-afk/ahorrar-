@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -12,9 +13,11 @@ import {
   PiggyBank,
   Sparkles,
   Plus,
+  LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useFinance } from '@/components/finance-provider'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
   { label: 'Inicio', icon: LayoutDashboard, active: true },
@@ -85,13 +88,41 @@ function NewMovementButton({ onClick }: { onClick: () => void }) {
   )
 }
 
+function UserSection({ email, onSignOut }: { email: string; onSignOut: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-2xl bg-muted px-3.5 py-3">
+      <p className="min-w-0 truncate text-xs font-medium text-muted-foreground" title={email}>
+        {email}
+      </p>
+      <button
+        type="button"
+        onClick={onSignOut}
+        aria-label="Cerrar sesión"
+        title="Cerrar sesión"
+        className="flex size-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-secondary-foreground"
+      >
+        <LogOut className="size-4" aria-hidden="true" />
+      </button>
+    </div>
+  )
+}
+
 export function DashboardNav() {
   const [open, setOpen] = useState(false)
-  const { setNewMovementOpen } = useFinance()
+  const { setNewMovementOpen, user } = useFinance()
+  const router = useRouter()
 
   const openMovement = () => {
     setOpen(false)
     setNewMovementOpen(true)
+  }
+
+  const handleSignOut = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    setOpen(false)
+    router.push('/login')
+    router.refresh()
   }
 
   return (
@@ -105,6 +136,7 @@ export function DashboardNav() {
         <div className="flex flex-col gap-3">
           <NewMovementButton onClick={openMovement} />
           <ProTip />
+          {user && <UserSection email={user.email} onSignOut={handleSignOut} />}
         </div>
       </aside>
 
@@ -148,6 +180,7 @@ export function DashboardNav() {
             <div className="flex flex-col gap-3">
               <NewMovementButton onClick={openMovement} />
               <ProTip />
+              {user && <UserSection email={user.email} onSignOut={handleSignOut} />}
             </div>
           </div>
         </div>
