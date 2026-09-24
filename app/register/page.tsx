@@ -2,82 +2,34 @@
 
 import type { FormEvent } from 'react'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Mail, PiggyBank, TriangleAlert } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { Loader2, PiggyBank, TriangleAlert } from 'lucide-react'
+import { registerUser } from './actions'
 
 export default function RegisterPage() {
+  const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setLoading(true)
     setError(null)
 
-    if (password.length < 6) {
+    const { error: registerError } = await registerUser(name, email, password)
+
+    if (registerError) {
       setLoading(false)
-      setError('La contraseña debe tener al menos 6 caracteres.')
+      setError(registerError)
       return
     }
 
-    const supabase = createClient()
-    const { error: signUpError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        emailRedirectTo:
-          process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`,
-        data: {
-          full_name: name.trim(),
-        },
-      },
-    })
-
-    setLoading(false)
-
-    if (signUpError) {
-      if (signUpError.message.toLowerCase().includes('already registered')) {
-        setError('Ya existe una cuenta con ese correo. Intenta iniciar sesión.')
-      } else if (signUpError.message.toLowerCase().includes('password')) {
-        setError('La contraseña no cumple los requisitos mínimos de seguridad.')
-      } else {
-        setError('No pudimos crear tu cuenta. Intenta de nuevo.')
-      }
-      return
-    }
-
-    setSuccess(true)
-  }
-
-  if (success) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-4 py-12 sm:px-6">
-        <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
-          <span className="flex size-14 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground">
-            <Mail className="size-7" aria-hidden="true" />
-          </span>
-          <div>
-            <h1 className="font-display text-xl font-bold tracking-tight text-foreground">
-              Revisa tu correo
-            </h1>
-            <p className="mt-2 text-sm text-pretty text-muted-foreground">
-              Te enviamos un enlace de confirmación a <span className="font-semibold text-foreground">{email}</span>. Confírmalo para empezar a usar Ahorrar+.
-            </p>
-          </div>
-          <Link
-            href="/login"
-            className="inline-flex items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5"
-          >
-            Ir a iniciar sesión
-          </Link>
-        </div>
-      </main>
-    )
+    router.push('/')
+    router.refresh()
   }
 
   return (
