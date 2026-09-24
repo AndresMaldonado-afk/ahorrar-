@@ -8,12 +8,106 @@ export function formatMoney(value: number, withSign = false) {
   return `${value < 0 ? '-' : '+'}${formatted}`
 }
 
-export const summary = {
-  balance: 48250,
-  income: 32000,
-  expenses: 19750,
-  saved: 12250,
-  savingsRate: 38,
+export function formatDate(iso: string) {
+  const date = new Date(iso + 'T00:00:00')
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diffDays = Math.round((today.getTime() - date.getTime()) / 86400000)
+  if (diffDays === 0) return 'Hoy'
+  if (diffDays === 1) return 'Ayer'
+  return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' }).format(date)
+}
+
+export function todayISO() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+/** Palette used when the user creates a new category. */
+export const categoryPalette = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+]
+
+/** Emoji choices offered when the user creates a new category. */
+export const categoryEmojiOptions = [
+  '🛒', '🏠', '🚌', '🎧', '💡', '🍽️', '🚗', '🏥', '🎓', '🎁',
+  '🐶', '👕', '📱', '💼', '✨', '☕', '🎮', '📚', '✈️', '🎬',
+  '🏋️', '🧴', '🐾', '🧾', '💰', '🛠️', '🎵', '🍎', '🚕', '🪙',
+]
+
+export type CategoryType = 'income' | 'expense'
+
+export type Category = {
+  id: string
+  name: string
+  type: CategoryType
+  /** Estimated monthly budget. Only meaningful for expense categories. */
+  limit: number
+  emoji: string
+  color: string
+}
+
+export type Product = {
+  id: string
+  name: string
+  price: number
+}
+
+export type Transaction = {
+  id: string
+  type: CategoryType
+  title: string
+  categoryId: string
+  /** Always a positive number. The sign is derived from `type`. */
+  amount: number
+  date: string
+  products?: Product[]
+}
+
+/** Amount signed for balance math: income positive, expense negative. */
+export function signedAmount(t: Transaction) {
+  return t.type === 'income' ? t.amount : -t.amount
+}
+
+export const initialCategories: Category[] = [
+  { id: 'sueldo', name: 'Sueldo', type: 'income', limit: 0, emoji: '💼', color: 'var(--chart-1)' },
+  { id: 'extra', name: 'Ingresos extra', type: 'income', limit: 0, emoji: '✨', color: 'var(--chart-3)' },
+  { id: 'vivienda', name: 'Vivienda', type: 'expense', limit: 8000, emoji: '🏠', color: 'var(--chart-1)' },
+  { id: 'comida', name: 'Alimentación', type: 'expense', limit: 5000, emoji: '🛒', color: 'var(--chart-2)' },
+  { id: 'transporte', name: 'Transporte', type: 'expense', limit: 2500, emoji: '🚌', color: 'var(--chart-3)' },
+  { id: 'ocio', name: 'Ocio', type: 'expense', limit: 2000, emoji: '🎧', color: 'var(--chart-4)' },
+  { id: 'servicios', name: 'Servicios', type: 'expense', limit: 2000, emoji: '💡', color: 'var(--chart-5)' },
+]
+
+export const initialTransactions: Transaction[] = [
+  { id: 't1', type: 'income', title: 'Nómina', categoryId: 'sueldo', amount: 32000, date: todayISO() },
+  {
+    id: 't2',
+    type: 'expense',
+    title: 'Súper de la semana',
+    categoryId: 'comida',
+    amount: 1240,
+    date: todayISO(),
+    products: [
+      { id: 'p1', name: 'Frutas y verduras', price: 420 },
+      { id: 'p2', name: 'Carne y pollo', price: 510 },
+      { id: 'p3', name: 'Despensa básica', price: 310 },
+    ],
+  },
+  { id: 't3', type: 'expense', title: 'Suscripción música', categoryId: 'ocio', amount: 129, date: offsetISO(1) },
+  { id: 't4', type: 'expense', title: 'Renta departamento', categoryId: 'vivienda', amount: 7500, date: offsetISO(2) },
+  { id: 't5', type: 'expense', title: 'Café con amigos', categoryId: 'ocio', amount: 180, date: offsetISO(3) },
+  { id: 't6', type: 'expense', title: 'Recibo de luz', categoryId: 'servicios', amount: 640, date: offsetISO(4) },
+  { id: 't7', type: 'expense', title: 'Tarjeta de transporte', categoryId: 'transporte', amount: 800, date: offsetISO(5) },
+]
+
+function offsetISO(daysAgo: number) {
+  const d = new Date()
+  d.setDate(d.getDate() - daysAgo)
+  return d.toISOString().slice(0, 10)
 }
 
 export const cashflow = [
@@ -65,35 +159,5 @@ export const goals: Goal[] = [
   },
 ]
 
-export type Budget = {
-  category: string
-  spent: number
-  limit: number
-  color: string
-}
-
-export const budgets: Budget[] = [
-  { category: 'Vivienda', spent: 7500, limit: 8000, color: 'var(--chart-1)' },
-  { category: 'Comida', spent: 4200, limit: 5000, color: 'var(--chart-2)' },
-  { category: 'Transporte', spent: 1800, limit: 2500, color: 'var(--chart-3)' },
-  { category: 'Ocio', spent: 2600, limit: 2000, color: 'var(--chart-4)' },
-  { category: 'Servicios', spent: 1650, limit: 2000, color: 'var(--chart-5)' },
-]
-
-export type Transaction = {
-  id: string
-  title: string
-  category: string
-  emoji: string
-  amount: number
-  date: string
-}
-
-export const transactions: Transaction[] = [
-  { id: 't1', title: 'Nómina', category: 'Ingreso', emoji: '💼', amount: 32000, date: 'Hoy' },
-  { id: 't2', title: 'Súper de la semana', category: 'Comida', emoji: '🛒', amount: -1240, date: 'Hoy' },
-  { id: 't3', title: 'Suscripción música', category: 'Ocio', emoji: '🎧', amount: -129, date: 'Ayer' },
-  { id: 't4', title: 'Aporte a metas', category: 'Ahorro', emoji: '🐷', amount: -2000, date: 'Ayer' },
-  { id: 't5', title: 'Café con amigos', category: 'Ocio', emoji: '☕', amount: -180, date: '2 sep' },
-  { id: 't6', title: 'Recibo de luz', category: 'Servicios', emoji: '💡', amount: -640, date: '1 sep' },
-]
+/** Starting balance so the header balance reflects savings on top of it. */
+export const openingBalance = 28500

@@ -1,42 +1,47 @@
-import { Wallet, TrendingUp, TrendingDown, PiggyBank, ArrowUpRight, ArrowDownRight } from 'lucide-react'
-import { summary, formatMoney } from '@/lib/finance-data'
+'use client'
 
-const cards = [
-  {
-    label: 'Balance total',
-    value: summary.balance,
-    icon: Wallet,
-    trend: '+8.2%',
-    up: true,
-    highlight: true,
-  },
-  {
-    label: 'Ingresos del mes',
-    value: summary.income,
-    icon: TrendingUp,
-    trend: '+4.9%',
-    up: true,
-    highlight: false,
-  },
-  {
-    label: 'Gastos del mes',
-    value: summary.expenses,
-    icon: TrendingDown,
-    trend: '-2.1%',
-    up: false,
-    highlight: false,
-  },
-  {
-    label: 'Ahorrado',
-    value: summary.saved,
-    icon: PiggyBank,
-    trend: `${summary.savingsRate}%`,
-    up: true,
-    highlight: false,
-  },
-]
+import { Wallet, TrendingUp, TrendingDown, PiggyBank, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { formatMoney } from '@/lib/finance-data'
+import { useFinance } from '@/components/finance-provider'
 
 export function BalanceCards() {
+  const { summary } = useFinance()
+
+  const cards = [
+    {
+      label: 'Balance total',
+      value: summary.balance,
+      icon: Wallet,
+      trend: `${summary.savingsRate}% ahorro`,
+      up: true,
+      highlight: true,
+    },
+    {
+      label: 'Ingresos del mes',
+      value: summary.income,
+      icon: TrendingUp,
+      trend: `${summary.incomeCount} mov`,
+      up: true,
+      highlight: false,
+    },
+    {
+      label: 'Gastos del mes',
+      value: summary.expenses,
+      icon: TrendingDown,
+      trend: `${summary.expenseCount} mov`,
+      up: false,
+      highlight: false,
+    },
+    {
+      label: 'Ahorrado',
+      value: summary.saved,
+      icon: PiggyBank,
+      trend: `${summary.savingsRate}%`,
+      up: summary.saved >= 0,
+      highlight: false,
+    },
+  ]
+
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       {cards.map((card) => {
