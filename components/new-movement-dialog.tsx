@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { Plus, Trash2, ListPlus, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Plus, Save, Trash2, ListPlus, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import { useFinance } from '@/components/finance-provider'
 import { categoryEmojiOptions, formatMoney, todayISO, type CategoryType, type Product } from '@/lib/finance-data'
@@ -17,10 +17,14 @@ export function NewMovementDialog() {
   const {
     categories,
     addTransaction,
+    updateTransaction,
     addCategory,
     newMovementOpen,
     setNewMovementOpen,
+    editingTransaction,
+    setEditingTransaction,
   } = useFinance()
+  const isEdit = Boolean(editingTransaction)
 
   const [type, setType] = useState<CategoryType>('expense')
   const [amount, setAmount] = useState('')
@@ -35,6 +39,30 @@ export function NewMovementDialog() {
   const [newCategoryEmoji, setNewCategoryEmoji] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!newMovementOpen) return
+    if (editingTransaction) {
+      setType(editingTransaction.type)
+      setCategoryId(editingTransaction.categoryId)
+      setDate(editingTransaction.date)
+      setTitle(editingTransaction.title)
+      if (editingTransaction.products && editingTransaction.products.length > 0) {
+        setUseProducts(true)
+        setRows(
+          editingTransaction.products.map((p) => ({ id: p.id, name: p.name, price: String(p.price) })),
+        )
+        setAmount('')
+      } else {
+        setUseProducts(false)
+        setRows([newRow()])
+        setAmount(String(editingTransaction.amount))
+      }
+      setCreatingCategory(false)
+      setError('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newMovementOpen, editingTransaction])
 
   const filteredCategories = useMemo(
     () => categories.filter((c) => c.type === type),
@@ -65,6 +93,7 @@ export function NewMovementDialog() {
 
   function close() {
     setNewMovementOpen(false)
+    setEditingTransaction(null)
     reset()
   }
 
@@ -122,14 +151,12 @@ export function NewMovementDialog() {
     }
     setSubmitting(true)
     try {
-      await addTransaction({
-        type,
-        title,
-        categoryId,
-        amount: effectiveAmount,
-        date,
-        products,
-      })
+      const payload = { type, title, categoryId, amount: effectiveAmount, date, products }
+      if (isEdit && editingTransaction) {
+        await updateTransaction(editingTransaction.id, payload)
+      } else {
+        await addTransaction(payload)
+      }
       close()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar el movimiento')
@@ -146,8 +173,12 @@ export function NewMovementDialog() {
     <Modal
       open={newMovementOpen}
       onClose={close}
-      title="Nuevo movimiento"
-      description="Registra un ingreso o gasto y mantén tus finanzas al día."
+      title={isEdit ? 'Editar movimiento' : 'Nuevo movimiento'}
+      description={
+        isEdit
+          ? 'Actualiza los datos de este movimiento.'
+          : 'Registra un ingreso o gasto y mantén tus finanzas al día.'
+      }
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         {/* Type toggle */}
@@ -417,8 +448,8 @@ export function NewMovementDialog() {
             disabled={submitting}
             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-70"
           >
-            <Plus className="size-4" aria-hidden="true" />
-            {submitting ? 'Guardando…' : 'Guardar movimiento'}
+            {isEdit ? <Save className="size-4" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />}
+            {submitting ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Guardar movimiento'}
           </button>
         </div>
       </form>

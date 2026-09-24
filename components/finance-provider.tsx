@@ -53,9 +53,13 @@ type FinanceContextValue = {
   updateCategory: (id: string, input: NewCategoryInput) => Promise<Category>
   deleteCategory: (id: string) => Promise<void>
   addTransaction: (input: NewTransactionInput) => Promise<void>
+  updateTransaction: (id: string, input: NewTransactionInput) => Promise<void>
+  deleteTransaction: (id: string) => Promise<void>
   getCategory: (id: string) => Category | undefined
   newMovementOpen: boolean
   setNewMovementOpen: (open: boolean) => void
+  editingTransaction: Transaction | null
+  setEditingTransaction: (transaction: Transaction | null) => void
   manageCategoriesOpen: boolean
   setManageCategoriesOpen: (open: boolean) => void
 }
@@ -116,6 +120,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newMovementOpen, setNewMovementOpen] = useState(false)
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false)
 
   useEffect(() => {
@@ -284,6 +289,71 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setTransactions((prev) => [transaction, ...prev])
   }
 
+  const updateTransaction = async (id: string, input: NewTransactionInput) => {
+    if (!user) throw new Error('No hay sesión activa')
+
+    const { data: transactionRow, error: updateError } = await supabase
+      .from('transactions')
+      .update({
+        category_id: input.categoryId,
+        type: input.type,
+        title: input.title.trim() || 'Movimiento',
+        amount: Math.max(0, input.amount),
+        date: input.date,
+      })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select('id, category_id, type, title, amount, date')
+      .single()
+
+    if (updateError || !transactionRow) {
+      throw new Error('No se pudo actualizar el movimiento. Intenta de nuevo.')
+    }
+
+    const { error: clearItemsError } = await supabase.from('transaction_items').delete().eq('transaction_id', id)
+    if (clearItemsError) {
+      throw new Error('No se pudieron actualizar los productos del movimiento.')
+    }
+
+    let items: { id: string; name: string; price: number }[] = []
+    if (input.products && input.products.length > 0) {
+      const { data: itemRows, error: itemsError } = await supabase
+        .from('transaction_items')
+        .insert(
+          input.products.map((product) => ({
+            transaction_id: id,
+            name: product.name,
+            price: Math.max(0, product.price),
+          })),
+        )
+        .select('id, name, price')
+
+      if (itemsError) {
+        throw new Error('El movimiento se actualizó, pero no se pudieron guardar los productos.')
+      }
+      items = itemRows ?? []
+    }
+
+    const transaction = mapTransaction({ ...transactionRow, transaction_items: items })
+    setTransactions((prev) => prev.map((t) => (t.id === id ? transaction : t)))
+  }
+
+  const deleteTransaction = async (id: string) => {
+    if (!user) throw new Error('No hay sesión activa')
+
+    const { error: itemsError } = await supabase.from('transaction_items').delete().eq('transaction_id', id)
+    if (itemsError) {
+      throw new Error('No se pudo eliminar el movimiento. Intenta de nuevo.')
+    }
+
+    const { error: deleteError } = await supabase.from('transactions').delete().eq('id', id).eq('user_id', user.id)
+    if (deleteError) {
+      throw new Error('No se pudo eliminar el movimiento. Intenta de nuevo.')
+    }
+
+    setTransactions((prev) => prev.filter((t) => t.id !== id))
+  }
+
   const getCategory = (id: string) => categories.find((c) => c.id === id)
 
   const budgets = useMemo<DerivedBudget[]>(() => {
@@ -326,9 +396,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     updateCategory,
     deleteCategory,
     addTransaction,
+    updateTransaction,
+    deleteTransaction,
     getCategory,
     newMovementOpen,
     setNewMovementOpen,
+    editingTransaction,
+    setEditingTransaction,
     manageCategoriesOpen,
     setManageCategoriesOpen,
   }

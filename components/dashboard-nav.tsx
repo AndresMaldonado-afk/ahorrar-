@@ -24,7 +24,7 @@ import { createClient } from '@/lib/supabase/client'
 const navItems = [
   { label: 'Inicio', icon: LayoutDashboard, href: '/' },
   { label: 'Categorías', icon: Tags, href: '/categorias' },
-  { label: 'Movimientos', icon: ArrowLeftRight, href: '#' },
+  { label: 'Movimientos', icon: ArrowLeftRight, href: '/movimientos' },
   { label: 'Metas', icon: Target, href: '#' },
   { label: 'Presupuesto', icon: PieChart, href: '#' },
   { label: 'Ajustes', icon: Settings, href: '#' },
