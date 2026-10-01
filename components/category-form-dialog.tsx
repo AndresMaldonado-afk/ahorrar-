@@ -111,23 +111,21 @@ export function CategoryFormDialog({
           />
         </div>
 
-        {type === 'expense' && (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="cat-limit" className={labelClass}>
-              Límite mensual
-            </label>
-            <input
-              id="cat-limit"
-              inputMode="decimal"
-              type="number"
-              min="0"
-              placeholder="Opcional"
-              value={limit}
-              onChange={(e) => setLimit(e.target.value)}
-              className={inputClass}
-            />
-          </div>
-        )}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="cat-limit" className={labelClass}>
+            {type === 'expense' ? 'Límite mensual' : 'Meta de ingreso mensual'}
+          </label>
+          <input
+            id="cat-limit"
+            inputMode="decimal"
+            type="number"
+            min="0"
+            placeholder="Opcional"
+            value={limit}
+            onChange={(e) => setLimit(e.target.value)}
+            className={inputClass}
+          />
+        </div>
 
         <div className="flex flex-col gap-2">
           <p className="text-xs font-semibold text-muted-foreground">Elige un emoji</p>

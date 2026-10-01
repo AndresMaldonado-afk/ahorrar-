@@ -182,7 +182,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (!user) throw new Error('No hay sesión activa')
     const paletteColor = categoryPalette[categories.length % categoryPalette.length]
     const emoji = input.emoji || emojiPool[categories.length % emojiPool.length]
-    const monthlyLimit = input.type === 'expense' ? Math.max(0, input.limit) : 0
+    const monthlyLimit = Math.max(0, input.limit)
 
     const { data, error: insertError } = await supabase
       .from('categories')
@@ -208,7 +208,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const updateCategory = async (id: string, input: NewCategoryInput) => {
     if (!user) throw new Error('No hay sesión activa')
-    const monthlyLimit = input.type === 'expense' ? Math.max(0, input.limit) : 0
+    const monthlyLimit = Math.max(0, input.limit)
     const existing = categories.find((c) => c.id === id)
 
     const { data, error: updateError } = await supabase
@@ -357,14 +357,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const getCategory = (id: string) => categories.find((c) => c.id === id)
 
   const budgets = useMemo<DerivedBudget[]>(() => {
-    return categories
-      .filter((c) => c.type === 'expense')
-      .map((category) => {
-        const spent = transactions
-          .filter((t) => t.type === 'expense' && t.categoryId === category.id)
-          .reduce((sum, t) => sum + t.amount, 0)
-        return { category, spent, limit: category.limit, color: category.color }
-      })
+    const totals = new Map<string, number>()
+    for (const t of transactions) {
+      const category = categories.find((c) => c.id === t.categoryId)
+      if (!category || category.type !== t.type) continue
+      totals.set(t.categoryId, (totals.get(t.categoryId) ?? 0) + t.amount)
+    }
+    return categories.map((category) => ({
+      category,
+      spent: totals.get(category.id) ?? 0,
+      limit: category.limit,
+      color: category.color,
+    }))
   }, [categories, transactions])
 
   const summary = useMemo(() => {

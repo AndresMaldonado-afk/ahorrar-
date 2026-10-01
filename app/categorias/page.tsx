@@ -213,7 +213,9 @@ function CategoriesContent() {
                                 ? hasLimit
                                   ? `${formatMoney(spent)} / ${formatMoney(category.limit)} al mes`
                                   : `${formatMoney(spent)} gastado · sin límite`
-                                : `${formatMoney(spent)} recibido`}
+                                : category.limit > 0
+                                  ? `${formatMoney(spent)} / ${formatMoney(category.limit)} meta`
+                                  : `${formatMoney(spent)} recibido`}
                             </span>
                             {over && <span className="text-xs font-bold text-accent">Sobre el límite</span>}
                           </div>
