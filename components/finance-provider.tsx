@@ -2,7 +2,49 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { categoryPalette, openingBalance, signedAmount, type Category, type CategoryType, type Product, type Transaction } from '@/lib/finance-data'
+import {
+  categoryPalette,
+  openingBalance,
+  planGoalRebalance,
+  roundMoney,
+  signedAmount,
+  type Category,
+  type CategoryType,
+  type Goal,
+  type Product,
+  type Transaction,
+} from '@/lib/finance-data'
+
+export type GoalInput = {
+  name: string
+  emoji: string
+  target: number
+  deadline: string | null
+  saved: number
+}
+
+type GoalRow = {
+  id: string
+  title: string
+  emoji: string
+  target_amount: number | string
+  current_amount: number | string
+  deadline: string | null
+}
+
+const goalColumns = 'id, title, emoji, target_amount, current_amount, deadline'
+
+function mapGoal(row: GoalRow, index: number): Goal {
+  return {
+    id: row.id,
+    name: row.title,
+    emoji: row.emoji,
+    target: Number(row.target_amount ?? 0),
+    saved: Number(row.current_amount ?? 0),
+    deadline: row.deadline,
+    color: categoryPalette[index % categoryPalette.length],
+  }
+}
 
 export type DerivedBudget = {
   category: Category
@@ -46,6 +88,17 @@ type FinanceContextValue = {
     incomeCount: number
     expenseCount: number
   }
+  goals: Goal[]
+  savings: {
+    total: number
+    allocated: number
+    free: number
+    overfunded: number
+  }
+  addGoal: (input: GoalInput, options?: { rebalance?: boolean }) => Promise<void>
+  updateGoal: (id: string, input: GoalInput, options?: { rebalance?: boolean }) => Promise<void>
+  moveGoalFunds: (id: string, delta: number) => Promise<void>
+  deleteGoal: (id: string) => Promise<void>
   user: CurrentUser | null
   loading: boolean
   error: string | null
@@ -117,6 +170,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [goalRows, setGoalRows] = useState<GoalRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newMovementOpen, setNewMovementOpen] = useState(false)
@@ -142,7 +196,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         name: authData.user.user_metadata?.full_name || authData.user.email?.split('@')[0] || 'ahorrador',
       }
 
-      const [categoriesRes, transactionsRes] = await Promise.all([
+      const [categoriesRes, transactionsRes, goalsRes] = await Promise.all([
         supabase
           .from('categories')
           .select('id, name, type, monthly_limit, emoji, color')
@@ -154,11 +208,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           .eq('user_id', currentUser.id)
           .order('date', { ascending: false })
           .order('created_at', { ascending: false }),
+        supabase
+          .from('goals')
+          .select(goalColumns)
+          .eq('user_id', currentUser.id)
+          .order('created_at', { ascending: true }),
       ])
 
       if (!active) return
 
-      if (categoriesRes.error || transactionsRes.error) {
+      if (categoriesRes.error || transactionsRes.error || goalsRes.error) {
         setError('No pudimos cargar tu información. Intenta de nuevo en un momento.')
         setLoading(false)
         return
@@ -167,6 +226,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setUser(currentUser)
       setCategories((categoriesRes.data ?? []).map(mapCategory))
       setTransactions((transactionsRes.data ?? []).map((row) => mapTransaction(row as unknown as TransactionRow)))
+      setGoalRows((goalsRes.data ?? []) as GoalRow[])
       setLoading(false)
     }
 
@@ -388,11 +448,121 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [transactions])
 
+  const goals = useMemo(() => goalRows.map(mapGoal), [goalRows])
+
+  const savings = useMemo(() => {
+    const total = roundMoney(summary.saved)
+    const allocated = roundMoney(goals.reduce((s, g) => s + g.saved, 0))
+    const free = roundMoney(total - allocated)
+    return { total, allocated, free, overfunded: free < 0 ? Math.abs(free) : 0 }
+  }, [summary.saved, goals])
+
+  const persistGoalAmounts = async (adjustments: { id: string; to: number }[]) => {
+    if (!user || adjustments.length === 0) return
+    const results = await Promise.all(
+      adjustments.map((a) =>
+        supabase
+          .from('goals')
+          .update({ current_amount: a.to })
+          .eq('id', a.id)
+          .eq('user_id', user.id)
+          .select(goalColumns)
+          .single(),
+      ),
+    )
+    if (results.some((r) => r.error || !r.data)) {
+      throw new Error('No se pudieron reajustar las demás metas. Intenta de nuevo.')
+    }
+    const updated = new Map(results.map((r) => [(r.data as GoalRow).id, r.data as GoalRow]))
+    setGoalRows((prev) => prev.map((row) => updated.get(row.id) ?? row))
+  }
+
+  const resolveFunding = (goalId: string | null, input: GoalInput, rebalance?: boolean) => {
+    if (!input.name.trim()) throw new Error('Escribe un nombre para la meta')
+    if (!(input.target > 0)) throw new Error('El monto objetivo debe ser mayor a 0')
+    if (input.saved < 0) throw new Error('El monto asignado no puede ser negativo')
+
+    const plan = planGoalRebalance({ goals, goalId, newAmount: input.saved, freeSavings: savings.free })
+    if (plan.kind === 'fits') return []
+    if (plan.kind === 'impossible' || !rebalance) {
+      throw new Error('No tienes suficiente ahorro libre para asignar ese monto.')
+    }
+    return plan.adjustments
+  }
+
+  const goalPayload = (input: GoalInput) => ({
+    title: input.name.trim(),
+    emoji: input.emoji || '🎯',
+    target_amount: roundMoney(input.target),
+    current_amount: roundMoney(input.saved),
+    deadline: input.deadline || null,
+  })
+
+  const addGoal = async (input: GoalInput, options?: { rebalance?: boolean }) => {
+    if (!user) throw new Error('No hay sesión activa')
+    const adjustments = resolveFunding(null, input, options?.rebalance)
+    await persistGoalAmounts(adjustments)
+
+    const { data, error: insertError } = await supabase
+      .from('goals')
+      .insert({ user_id: user.id, ...goalPayload(input) })
+      .select(goalColumns)
+      .single()
+
+    if (insertError || !data) throw new Error('No se pudo crear la meta. Intenta de nuevo.')
+    setGoalRows((prev) => [...prev, data as GoalRow])
+  }
+
+  const updateGoal = async (id: string, input: GoalInput, options?: { rebalance?: boolean }) => {
+    if (!user) throw new Error('No hay sesión activa')
+    const adjustments = resolveFunding(id, input, options?.rebalance)
+    await persistGoalAmounts(adjustments)
+
+    const { data, error: updateError } = await supabase
+      .from('goals')
+      .update(goalPayload(input))
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(goalColumns)
+      .single()
+
+    if (updateError || !data) throw new Error('No se pudo actualizar la meta. Intenta de nuevo.')
+    setGoalRows((prev) => prev.map((row) => (row.id === id ? (data as GoalRow) : row)))
+  }
+
+  const moveGoalFunds = async (id: string, delta: number) => {
+    if (!user) throw new Error('No hay sesión activa')
+    const goal = goals.find((g) => g.id === id)
+    if (!goal) throw new Error('No encontramos esa meta')
+    const amount = roundMoney(delta)
+    if (amount === 0) throw new Error('Escribe un monto mayor a 0')
+    if (amount > 0 && amount > Math.max(0, savings.free) + 0.001) {
+      throw new Error(`Solo tienes ${Math.max(0, savings.free).toFixed(2)} de ahorro libre disponible.`)
+    }
+    if (amount < 0 && Math.abs(amount) > goal.saved + 0.001) {
+      throw new Error('No puedes retirar más de lo que tiene la meta.')
+    }
+    await persistGoalAmounts([{ id, to: Math.max(0, roundMoney(goal.saved + amount)) }])
+  }
+
+  const deleteGoal = async (id: string) => {
+    if (!user) throw new Error('No hay sesión activa')
+    const { error: deleteError } = await supabase.from('goals').delete().eq('id', id).eq('user_id', user.id)
+    if (deleteError) throw new Error('No se pudo eliminar la meta. Intenta de nuevo.')
+    setGoalRows((prev) => prev.filter((row) => row.id !== id))
+  }
+
   const value: FinanceContextValue = {
     categories,
     transactions,
     budgets,
     summary,
+    goals,
+    savings,
+    addGoal,
+    updateGoal,
+    moveGoalFunds,
+    deleteGoal,
     user,
     loading,
     error,
