@@ -123,41 +123,119 @@ export type Goal = {
   id: string
   name: string
   emoji: string
+  /** Money from the user's savings currently assigned to this goal (computed for auto goals). */
   saved: number
+  /** Amount persisted in the database; only meaningful for manual goals. */
+  storedSaved: number
+  /** Auto goals share the unlocked savings equally; manual goals keep their fixed amount. */
+  isAuto: boolean
   target: number
-  deadline: string
+  /** ISO date (YYYY-MM-DD) or null when the goal has no deadline. */
+  deadline: string | null
   color: string
 }
 
-export const goals: Goal[] = [
-  {
-    id: 'viaje',
-    name: 'Viaje a la playa',
-    emoji: '🏝️',
-    saved: 14500,
-    target: 25000,
-    deadline: 'Dic 2026',
-    color: 'var(--chart-1)',
-  },
-  {
-    id: 'emergencia',
-    name: 'Fondo de emergencia',
-    emoji: '🛟',
-    saved: 32000,
-    target: 60000,
-    deadline: 'Jun 2027',
-    color: 'var(--chart-3)',
-  },
-  {
-    id: 'laptop',
-    name: 'Laptop nueva',
-    emoji: '💻',
-    saved: 9800,
-    target: 22000,
-    deadline: 'Mar 2027',
-    color: 'var(--chart-4)',
-  },
+type DistributableGoal = Pick<Goal, 'id' | 'isAuto' | 'storedSaved' | 'target'>
+
+/**
+ * Manual goals keep their fixed amount. Whatever savings remain are split equally (1/N) among
+ * auto goals; a goal never receives more than its target, and the excess flows to the rest.
+ */
+export function distributeGoals(goals: DistributableGoal[], totalSavings: number) {
+  const amounts = new Map<string, number>()
+  let manualSum = 0
+  for (const goal of goals) {
+    if (goal.isAuto) {
+      amounts.set(goal.id, 0)
+    } else {
+      amounts.set(goal.id, goal.storedSaved)
+      manualSum += goal.storedSaved
+    }
+  }
+
+  let pool = Math.max(0, totalSavings - manualSum)
+  let pending = goals.filter((g) => g.isAuto && g.target > 0)
+
+  while (pending.length > 0 && pool > 0.004) {
+    const share = pool / pending.length
+    const capped = pending.filter((g) => g.target - (amounts.get(g.id) ?? 0) <= share)
+    if (capped.length === 0) {
+      for (const goal of pending) amounts.set(goal.id, (amounts.get(goal.id) ?? 0) + share)
+      pool = 0
+      break
+    }
+    for (const goal of capped) {
+      pool -= goal.target - (amounts.get(goal.id) ?? 0)
+      amounts.set(goal.id, goal.target)
+    }
+    pending = pending.filter((g) => !capped.includes(g))
+  }
+
+  for (const goal of goals) {
+    if (goal.isAuto) amounts.set(goal.id, Math.floor((amounts.get(goal.id) ?? 0) * 100) / 100)
+  }
+  return { amounts, manualSum: roundMoney(manualSum) }
+}
+
+export const goalEmojiOptions = [
+  '🎯', '🏝️', '🛟', '💻', '🚗', '🏠', '✈️', '🎓', '💍', '🎁',
+  '📱', '🎮', '🏋️', '🐶', '👶', '🛋️', '🎸', '📷', '🚲', '💰',
 ]
+
+export function roundMoney(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+export function formatGoalDeadline(iso: string | null) {
+  if (!iso) return 'Sin fecha límite'
+  const date = new Date(iso + 'T00:00:00')
+  const label = new Intl.DateTimeFormat('es-MX', { month: 'short', year: 'numeric' }).format(date).replace('.', '')
+  return `Meta para ${label.charAt(0).toUpperCase()}${label.slice(1)}`
+}
+
+export type GoalRebalancePlan =
+  | { kind: 'fits' }
+  | { kind: 'rebalance'; shortfall: number; adjustments: { id: string; from: number; to: number }[] }
+  | { kind: 'impossible'; shortfall: number; maxAssignable: number }
+
+/**
+ * Decides how to fund `newAmount` for a goal. If the free savings cover the increase it fits;
+ * otherwise the missing money is taken proportionally from the other goals.
+ */
+export function planGoalRebalance({
+  goals,
+  goalId,
+  newAmount,
+  freeSavings,
+}: {
+  goals: Goal[]
+  goalId: string | null
+  newAmount: number
+  freeSavings: number
+}): GoalRebalancePlan {
+  const current = goals.find((g) => g.id === goalId)?.saved ?? 0
+  const available = Math.max(0, freeSavings)
+  const increase = roundMoney(newAmount - current)
+  if (increase <= available + 0.001) return { kind: 'fits' }
+
+  const shortfall = roundMoney(increase - available)
+  const others = goals.filter((g) => g.id !== goalId && g.saved > 0)
+  const othersTotal = roundMoney(others.reduce((s, g) => s + g.saved, 0))
+
+  if (othersTotal + 0.001 < shortfall) {
+    return { kind: 'impossible', shortfall, maxAssignable: roundMoney(current + available + othersTotal) }
+  }
+
+  const ratio = 1 - shortfall / othersTotal
+  const adjustments = others.map((g) => ({ id: g.id, from: g.saved, to: roundMoney(g.saved * ratio) }))
+  const taken = roundMoney(adjustments.reduce((s, a) => s + (a.from - a.to), 0))
+  const drift = roundMoney(shortfall - taken)
+  if (drift !== 0 && adjustments.length > 0) {
+    const largest = adjustments.reduce((a, b) => (b.to > a.to ? b : a))
+    largest.to = Math.max(0, roundMoney(largest.to - drift))
+  }
+  return { kind: 'rebalance', shortfall, adjustments }
+}
 
 /** Starting balance so the header balance reflects savings on top of it. */
 export const openingBalance = 28500
