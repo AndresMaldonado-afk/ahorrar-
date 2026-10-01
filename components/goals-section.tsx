@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, Minus, Pencil, Plus } from 'lucide-react'
+import { AlertTriangle, Lock, Minus, Pencil, Plus, Sparkles } from 'lucide-react'
 import { useFinance } from '@/components/finance-provider'
 import { GoalFormDialog } from '@/components/goal-form-dialog'
 import { GoalFundsDialog, type FundsMode } from '@/components/goal-funds-dialog'
@@ -9,11 +9,27 @@ import { formatGoalDeadline, formatMoney, type Goal } from '@/lib/finance-data'
 import { cn } from '@/lib/utils'
 
 export function GoalsSection() {
-  const { goals, savings, loading } = useFinance()
+  const { goals, savings, loading, autoDistribution, setAutoDistribution, setGoalMode, maxDepositFor } = useFinance()
   const [formOpen, setFormOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [fundsGoal, setFundsGoal] = useState<Goal | null>(null)
   const [fundsMode, setFundsMode] = useState<FundsMode>('deposit')
+  const [pending, setPending] = useState<string | null>(null)
+  const [modeError, setModeError] = useState('')
+
+  async function runModeChange(key: string, action: () => Promise<void>) {
+    setPending(key)
+    setModeError('')
+    try {
+      await action()
+    } catch (err) {
+      setModeError(err instanceof Error ? err.message : 'No se pudo cambiar el modo de distribución')
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const autoCount = goals.filter((g) => g.isAuto).length
 
   function openCreate() {
     setEditingGoal(null)
@@ -48,6 +64,46 @@ export function GoalsSection() {
           <Plus className="size-4.5" aria-hidden="true" />
         </button>
       </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span id="auto-distribution-label" className="text-sm font-semibold">
+            Distribución Automática de Ahorros
+          </span>
+          <span className="text-xs leading-relaxed text-muted-foreground text-pretty">
+            {goals.length === 0
+              ? 'Tu ahorro se repartirá en partes iguales entre tus metas.'
+              : autoCount > 0
+                ? `${formatMoney(Math.max(0, savings.unlocked))} repartidos entre ${autoCount} ${autoCount === 1 ? 'meta automática' : 'metas automáticas'}`
+                : 'Todas tus metas tienen montos fijos (manual).'}
+          </span>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={autoDistribution}
+          aria-labelledby="auto-distribution-label"
+          disabled={goals.length === 0 || pending !== null}
+          onClick={() => runModeChange('all', () => setAutoDistribution(!autoDistribution))}
+          className={cn(
+            'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60',
+            autoDistribution ? 'bg-primary' : 'bg-muted-foreground/30',
+          )}
+        >
+          <span
+            className={cn(
+              'inline-block size-5 rounded-full bg-card shadow-sm transition-transform',
+              autoDistribution ? 'translate-x-5.5' : 'translate-x-0.5',
+            )}
+          />
+        </button>
+      </div>
+
+      {modeError && (
+        <p className="rounded-xl bg-accent/12 px-3.5 py-2.5 text-sm font-medium text-accent" role="alert">
+          {modeError}
+        </p>
+      )}
 
       <dl className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/60 p-3 text-center">
         <div className="flex flex-col gap-0.5">
@@ -115,8 +171,30 @@ export function GoalsSection() {
                     >
                       {goal.emoji}
                     </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">{goal.name}</p>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <p className="truncate text-sm font-semibold">{goal.name}</p>
+                        <button
+                          type="button"
+                          onClick={() => runModeChange(goal.id, () => setGoalMode(goal.id, !goal.isAuto))}
+                          disabled={pending !== null}
+                          title={goal.isAuto ? 'Fijar el monto actual (pasar a Manual)' : 'Volver a reparto automático'}
+                          aria-label={`${goal.name}: modo ${goal.isAuto ? 'Automático' : 'Manual'}. Cambiar a ${goal.isAuto ? 'Manual' : 'Automático'}`}
+                          className={cn(
+                            'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold transition-colors disabled:opacity-60',
+                            goal.isAuto
+                              ? 'bg-primary/12 text-primary hover:bg-primary/20'
+                              : 'bg-muted text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          {goal.isAuto ? (
+                            <Sparkles className="size-3" aria-hidden="true" />
+                          ) : (
+                            <Lock className="size-3" aria-hidden="true" />
+                          )}
+                          {pending === goal.id ? '…' : goal.isAuto ? 'Auto' : 'Manual'}
+                        </button>
+                      </div>
                       <p className="text-xs text-muted-foreground">{formatGoalDeadline(goal.deadline)}</p>
                     </div>
                   </div>
@@ -138,7 +216,7 @@ export function GoalsSection() {
                   <button
                     type="button"
                     onClick={() => openFunds(goal, 'deposit')}
-                    disabled={freeAvailable <= 0}
+                    disabled={maxDepositFor(goal) <= 0}
                     className="inline-flex items-center gap-1 rounded-xl bg-primary/12 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
                   >
                     <Plus className="size-3.5" aria-hidden="true" />

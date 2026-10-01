@@ -1,15 +1,24 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Plus, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, Lock, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import { useFinance } from '@/components/finance-provider'
-import { formatMoney, goalEmojiOptions, planGoalRebalance, roundMoney, type Goal } from '@/lib/finance-data'
+import {
+  distributeGoals,
+  formatMoney,
+  goalEmojiOptions,
+  planGoalRebalance,
+  roundMoney,
+  type Goal,
+  type GoalRebalancePlan,
+} from '@/lib/finance-data'
 import { cn } from '@/lib/utils'
 
 export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose: () => void; goal: Goal | null }) {
-  const { goals, savings, addGoal, updateGoal, deleteGoal } = useFinance()
+  const { goals, savings, autoDistribution, addGoal, updateGoal, deleteGoal } = useFinance()
   const isEdit = Boolean(goal)
+  const [isAuto, setIsAuto] = useState(true)
 
   const [name, setName] = useState('')
   const [emoji, setEmoji] = useState('🎯')
@@ -28,20 +37,39 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
     setTarget(goal ? String(goal.target) : '')
     setDeadline(goal?.deadline ?? '')
     setSaved(goal ? String(goal.saved) : '')
+    setIsAuto(goal ? goal.isAuto : autoDistribution)
     setRebalance(false)
     setConfirmDelete(false)
     setError('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, goal])
 
   const targetValue = Number.parseFloat(target) || 0
   const savedValue = Math.max(0, Number.parseFloat(saved) || 0)
   const pct = targetValue > 0 ? Math.min(100, Math.round((savedValue / targetValue) * 100)) : 0
-  const availableForGoal = roundMoney((goal?.saved ?? 0) + Math.max(0, savings.free))
-
-  const plan = useMemo(
-    () => planGoalRebalance({ goals, goalId: goal?.id ?? null, newAmount: savedValue, freeSavings: savings.free }),
-    [goals, goal, savedValue, savings.free],
+  const availableForGoal = roundMoney(
+    (goal && !goal.isAuto ? goal.storedSaved : 0) + Math.max(0, savings.unlocked),
   )
+
+  const plan = useMemo<GoalRebalancePlan>(() => {
+    if (isAuto) return { kind: 'fits' }
+    return planGoalRebalance({
+      goals: goals.filter((g) => !g.isAuto),
+      goalId: goal?.id ?? null,
+      newAmount: savedValue,
+      freeSavings: savings.unlocked,
+    })
+  }, [isAuto, goals, goal, savedValue, savings.unlocked])
+
+  const autoPreview = useMemo(() => {
+    if (!isAuto || targetValue <= 0) return null
+    const draftId = goal?.id ?? '__draft__'
+    const draft = { id: draftId, isAuto: true, storedSaved: 0, target: targetValue }
+    const others = goals.filter((g) => g.id !== draftId)
+    const { amounts } = distributeGoals([...others, draft], savings.total)
+    const amount = amounts.get(draftId) ?? 0
+    return { amount, pct: Math.min(100, Math.round((amount / targetValue) * 100)), sharedWith: others.filter((g) => g.isAuto).length + 1 }
+  }, [isAuto, targetValue, goal, goals, savings.total])
 
   const blocked = plan.kind === 'impossible' || (plan.kind === 'rebalance' && !rebalance)
 
@@ -57,12 +85,19 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
   async function handleSubmit() {
     if (!name.trim()) return setError('Escribe un nombre para la meta')
     if (!(targetValue > 0)) return setError('El monto objetivo debe ser mayor a 0')
-    if (blocked) return setError('No tienes suficiente ahorro libre para asignar ese monto.')
+    if (blocked) return setError('No tienes suficiente ahorro para fijar ese monto.')
 
     setSubmitting(true)
     setError('')
     try {
-      const payload = { name, emoji, target: targetValue, deadline: deadline || null, saved: savedValue }
+      const payload = {
+        name,
+        emoji,
+        target: targetValue,
+        deadline: deadline || null,
+        saved: isAuto ? 0 : savedValue,
+        isAuto,
+      }
       if (isEdit && goal) await updateGoal(goal.id, payload, { rebalance })
       else await addGoal(payload, { rebalance })
       onClose()
@@ -91,7 +126,7 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
       open={open}
       onClose={onClose}
       title={isEdit ? 'Editar meta' : 'Nueva meta de ahorro'}
-      description="El dinero asignado sale de tu ahorro libre (ingresos menos gastos)."
+      description="El dinero asignado sale de tu ahorro (ingresos menos gastos). Las metas manuales se descuentan primero y el resto se reparte entre las automáticas."
     >
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
@@ -160,10 +195,48 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 rounded-2xl bg-muted/60 p-4">
+        <div className="flex flex-col gap-3 rounded-2xl bg-muted/60 p-4">
+          <div className="flex flex-col gap-2">
+            <p id="goal-mode-label" className={labelClass}>
+              Modo de distribución
+            </p>
+            <div role="radiogroup" aria-labelledby="goal-mode-label" className="grid grid-cols-2 gap-1 rounded-xl bg-background p-1">
+              {[
+                { value: true, label: 'Automático', Icon: Sparkles },
+                { value: false, label: 'Manual', Icon: Lock },
+              ].map(({ value, label, Icon }) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="radio"
+                  aria-checked={isAuto === value}
+                  onClick={() => {
+                    if (!value && isAuto && autoPreview && !saved) setSaved(String(autoPreview.amount))
+                    setIsAuto(value)
+                  }}
+                  className={cn(
+                    'inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
+                    isAuto === value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Icon className="size-3.5" aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {isAuto ? (
+            <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+              {autoPreview
+                ? `Recibirá ${formatMoney(autoPreview.amount)} (${autoPreview.pct}% del objetivo), una parte igual del ahorro disponible entre ${autoPreview.sharedWith} ${autoPreview.sharedWith === 1 ? 'meta automática' : 'metas automáticas'}. Se recalcula solo cuando cambian tus ingresos, gastos o metas.`
+                : 'Escribe el monto objetivo para ver cuánto recibirá esta meta del reparto equitativo.'}
+            </p>
+          ) : (
+          <>
           <div className="flex items-baseline justify-between gap-2">
             <label htmlFor="goal-saved" className={labelClass}>
-              Monto asignado
+              Monto fijo
             </label>
             <span className="text-xs text-muted-foreground">
               Disponible: <span className="font-semibold text-foreground">{formatMoney(availableForGoal)}</span>
@@ -197,7 +270,7 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
           {plan.kind === 'impossible' && (
             <p className="flex gap-2 rounded-xl bg-accent/12 px-3 py-2.5 text-sm font-medium text-accent" role="alert">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              {`Superas tu ahorro libre por ${formatMoney(plan.shortfall)}. Como máximo puedes asignar ${formatMoney(plan.maxAssignable)} aunque reajustes tus otras metas.`}
+              {`Superas tu ahorro disponible por ${formatMoney(plan.shortfall)}. Como máximo puedes fijar ${formatMoney(plan.maxAssignable)} aunque reajustes tus otras metas.`}
             </p>
           )}
 
@@ -205,7 +278,7 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
             <div className="flex flex-col gap-2 rounded-xl bg-accent/12 px-3 py-2.5" role="alert">
               <p className="flex gap-2 text-sm font-medium text-accent">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                {`Te faltan ${formatMoney(plan.shortfall)} de ahorro libre para este monto.`}
+                {`Te faltan ${formatMoney(plan.shortfall)} de ahorro disponible para este monto.`}
               </p>
               <label className="flex items-start gap-2 text-sm text-foreground">
                 <input
@@ -214,7 +287,7 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
                   onChange={(e) => setRebalance(e.target.checked)}
                   className="mt-0.5 size-4 accent-primary"
                 />
-                <span>Tomar la diferencia de mis otras metas de forma proporcional</span>
+                <span>Tomar la diferencia de mis otras metas manuales de forma proporcional</span>
               </label>
               {rebalance && (
                 <ul className="flex flex-col gap-1 pl-6 text-xs text-muted-foreground">
@@ -234,6 +307,8 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
                 </ul>
               )}
             </div>
+          )}
+          </>
           )}
         </div>
 

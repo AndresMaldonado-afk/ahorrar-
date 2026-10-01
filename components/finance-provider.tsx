@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { createClient } from '@/lib/supabase/client'
 import {
   categoryPalette,
+  distributeGoals,
   openingBalance,
   planGoalRebalance,
   roundMoney,
@@ -21,6 +22,7 @@ export type GoalInput = {
   target: number
   deadline: string | null
   saved: number
+  isAuto: boolean
 }
 
 type GoalRow = {
@@ -30,17 +32,23 @@ type GoalRow = {
   target_amount: number | string
   current_amount: number | string
   deadline: string | null
+  is_auto: boolean
 }
 
-const goalColumns = 'id, title, emoji, target_amount, current_amount, deadline'
+type GoalUpdate = { id: string; current_amount: number; is_auto?: boolean }
+
+const goalColumns = 'id, title, emoji, target_amount, current_amount, deadline, is_auto'
 
 function mapGoal(row: GoalRow, index: number): Goal {
+  const stored = Number(row.current_amount ?? 0)
   return {
     id: row.id,
     name: row.title,
     emoji: row.emoji,
     target: Number(row.target_amount ?? 0),
-    saved: Number(row.current_amount ?? 0),
+    saved: stored,
+    storedSaved: stored,
+    isAuto: row.is_auto ?? true,
     deadline: row.deadline,
     color: categoryPalette[index % categoryPalette.length],
   }
@@ -94,7 +102,13 @@ type FinanceContextValue = {
     allocated: number
     free: number
     overfunded: number
+    /** Savings not locked by manual goals (what auto goals share). */
+    unlocked: number
   }
+  autoDistribution: boolean
+  setAutoDistribution: (enabled: boolean) => Promise<void>
+  setGoalMode: (id: string, isAuto: boolean) => Promise<void>
+  maxDepositFor: (goal: Goal) => number
   addGoal: (input: GoalInput, options?: { rebalance?: boolean }) => Promise<void>
   updateGoal: (id: string, input: GoalInput, options?: { rebalance?: boolean }) => Promise<void>
   moveGoalFunds: (id: string, delta: number) => Promise<void>
@@ -448,23 +462,39 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [transactions])
 
-  const goals = useMemo(() => goalRows.map(mapGoal), [goalRows])
+  const totalSavings = roundMoney(summary.saved)
+
+  const { goals, manualSum } = useMemo(() => {
+    const base = goalRows.map(mapGoal)
+    const { amounts, manualSum } = distributeGoals(base, totalSavings)
+    return {
+      goals: base.map((g) => ({ ...g, saved: amounts.get(g.id) ?? g.storedSaved })),
+      manualSum,
+    }
+  }, [goalRows, totalSavings])
 
   const savings = useMemo(() => {
-    const total = roundMoney(summary.saved)
     const allocated = roundMoney(goals.reduce((s, g) => s + g.saved, 0))
-    const free = roundMoney(total - allocated)
-    return { total, allocated, free, overfunded: free < 0 ? Math.abs(free) : 0 }
-  }, [summary.saved, goals])
+    const free = roundMoney(totalSavings - allocated)
+    return {
+      total: totalSavings,
+      allocated,
+      free,
+      overfunded: free < 0 ? Math.abs(free) : 0,
+      unlocked: roundMoney(totalSavings - manualSum),
+    }
+  }, [goals, manualSum, totalSavings])
 
-  const persistGoalAmounts = async (adjustments: { id: string; to: number }[]) => {
-    if (!user || adjustments.length === 0) return
+  const autoDistribution = goals.length === 0 || goals.some((g) => g.isAuto)
+
+  const persistGoalUpdates = async (updates: GoalUpdate[]) => {
+    if (!user || updates.length === 0) return
     const results = await Promise.all(
-      adjustments.map((a) =>
+      updates.map(({ id, ...fields }) =>
         supabase
           .from('goals')
-          .update({ current_amount: a.to })
-          .eq('id', a.id)
+          .update(fields)
+          .eq('id', id)
           .eq('user_id', user.id)
           .select(goalColumns)
           .single(),
@@ -481,27 +511,52 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (!input.name.trim()) throw new Error('Escribe un nombre para la meta')
     if (!(input.target > 0)) throw new Error('El monto objetivo debe ser mayor a 0')
     if (input.saved < 0) throw new Error('El monto asignado no puede ser negativo')
+    if (input.isAuto) return []
 
-    const plan = planGoalRebalance({ goals, goalId, newAmount: input.saved, freeSavings: savings.free })
+    const manualGoals = goals.filter((g) => !g.isAuto)
+    const plan = planGoalRebalance({
+      goals: manualGoals,
+      goalId,
+      newAmount: input.saved,
+      freeSavings: savings.unlocked,
+    })
     if (plan.kind === 'fits') return []
     if (plan.kind === 'impossible' || !rebalance) {
-      throw new Error('No tienes suficiente ahorro libre para asignar ese monto.')
+      throw new Error('No tienes suficiente ahorro para fijar ese monto.')
     }
-    return plan.adjustments
+    return plan.adjustments.map((a) => ({ id: a.id, current_amount: a.to }))
   }
 
   const goalPayload = (input: GoalInput) => ({
     title: input.name.trim(),
     emoji: input.emoji || '🎯',
     target_amount: roundMoney(input.target),
-    current_amount: roundMoney(input.saved),
+    current_amount: input.isAuto ? 0 : roundMoney(input.saved),
+    is_auto: input.isAuto,
     deadline: input.deadline || null,
   })
+
+  const freezeAmount = (goal: Goal) => ({ id: goal.id, current_amount: roundMoney(goal.saved), is_auto: false })
+
+  const setAutoDistribution = async (enabled: boolean) => {
+    if (!user) throw new Error('No hay sesión activa')
+    const updates = enabled
+      ? goals.filter((g) => !g.isAuto).map((g) => ({ id: g.id, current_amount: 0, is_auto: true }))
+      : goals.filter((g) => g.isAuto).map(freezeAmount)
+    await persistGoalUpdates(updates)
+  }
+
+  const setGoalMode = async (id: string, isAuto: boolean) => {
+    if (!user) throw new Error('No hay sesión activa')
+    const goal = goals.find((g) => g.id === id)
+    if (!goal || goal.isAuto === isAuto) return
+    await persistGoalUpdates([isAuto ? { id, current_amount: 0, is_auto: true } : freezeAmount(goal)])
+  }
 
   const addGoal = async (input: GoalInput, options?: { rebalance?: boolean }) => {
     if (!user) throw new Error('No hay sesión activa')
     const adjustments = resolveFunding(null, input, options?.rebalance)
-    await persistGoalAmounts(adjustments)
+    await persistGoalUpdates(adjustments)
 
     const { data, error: insertError } = await supabase
       .from('goals')
@@ -516,7 +571,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const updateGoal = async (id: string, input: GoalInput, options?: { rebalance?: boolean }) => {
     if (!user) throw new Error('No hay sesión activa')
     const adjustments = resolveFunding(id, input, options?.rebalance)
-    await persistGoalAmounts(adjustments)
+    await persistGoalUpdates(adjustments)
 
     const { data, error: updateError } = await supabase
       .from('goals')
@@ -536,14 +591,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (!goal) throw new Error('No encontramos esa meta')
     const amount = roundMoney(delta)
     if (amount === 0) throw new Error('Escribe un monto mayor a 0')
-    if (amount > 0 && amount > Math.max(0, savings.free) + 0.001) {
-      throw new Error(`Solo tienes ${Math.max(0, savings.free).toFixed(2)} de ahorro libre disponible.`)
+    const depositCap = maxDepositFor(goal)
+    if (amount > 0 && amount > depositCap + 0.001) {
+      throw new Error(`Solo puedes aportar hasta ${depositCap.toFixed(2)} a esta meta.`)
     }
     if (amount < 0 && Math.abs(amount) > goal.saved + 0.001) {
       throw new Error('No puedes retirar más de lo que tiene la meta.')
     }
-    await persistGoalAmounts([{ id, to: Math.max(0, roundMoney(goal.saved + amount)) }])
+    await persistGoalUpdates([
+      { id, current_amount: Math.max(0, roundMoney(goal.saved + amount)), is_auto: false },
+    ])
   }
+
+  const maxDepositFor = (goal: Goal) =>
+    Math.max(0, roundMoney(savings.unlocked - (goal.isAuto ? goal.saved : 0)))
 
   const deleteGoal = async (id: string) => {
     if (!user) throw new Error('No hay sesión activa')
@@ -559,6 +620,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     summary,
     goals,
     savings,
+    autoDistribution,
+    setAutoDistribution,
+    setGoalMode,
+    maxDepositFor,
     addGoal,
     updateGoal,
     moveGoalFunds,

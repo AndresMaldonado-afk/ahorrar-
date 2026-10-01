@@ -123,12 +123,58 @@ export type Goal = {
   id: string
   name: string
   emoji: string
-  /** Money from the user's savings currently assigned to this goal. */
+  /** Money from the user's savings currently assigned to this goal (computed for auto goals). */
   saved: number
+  /** Amount persisted in the database; only meaningful for manual goals. */
+  storedSaved: number
+  /** Auto goals share the unlocked savings equally; manual goals keep their fixed amount. */
+  isAuto: boolean
   target: number
   /** ISO date (YYYY-MM-DD) or null when the goal has no deadline. */
   deadline: string | null
   color: string
+}
+
+type DistributableGoal = Pick<Goal, 'id' | 'isAuto' | 'storedSaved' | 'target'>
+
+/**
+ * Manual goals keep their fixed amount. Whatever savings remain are split equally (1/N) among
+ * auto goals; a goal never receives more than its target, and the excess flows to the rest.
+ */
+export function distributeGoals(goals: DistributableGoal[], totalSavings: number) {
+  const amounts = new Map<string, number>()
+  let manualSum = 0
+  for (const goal of goals) {
+    if (goal.isAuto) {
+      amounts.set(goal.id, 0)
+    } else {
+      amounts.set(goal.id, goal.storedSaved)
+      manualSum += goal.storedSaved
+    }
+  }
+
+  let pool = Math.max(0, totalSavings - manualSum)
+  let pending = goals.filter((g) => g.isAuto && g.target > 0)
+
+  while (pending.length > 0 && pool > 0.004) {
+    const share = pool / pending.length
+    const capped = pending.filter((g) => g.target - (amounts.get(g.id) ?? 0) <= share)
+    if (capped.length === 0) {
+      for (const goal of pending) amounts.set(goal.id, (amounts.get(goal.id) ?? 0) + share)
+      pool = 0
+      break
+    }
+    for (const goal of capped) {
+      pool -= goal.target - (amounts.get(goal.id) ?? 0)
+      amounts.set(goal.id, goal.target)
+    }
+    pending = pending.filter((g) => !capped.includes(g))
+  }
+
+  for (const goal of goals) {
+    if (goal.isAuto) amounts.set(goal.id, Math.floor((amounts.get(goal.id) ?? 0) * 100) / 100)
+  }
+  return { amounts, manualSum: roundMoney(manualSum) }
 }
 
 export const goalEmojiOptions = [

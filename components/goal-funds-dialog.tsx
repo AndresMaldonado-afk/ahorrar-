@@ -17,7 +17,7 @@ export function GoalFundsDialog({
   mode: FundsMode
   onClose: () => void
 }) {
-  const { savings, moveGoalFunds } = useFinance()
+  const { maxDepositFor, moveGoalFunds } = useFinance()
   const [amount, setAmount] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -28,7 +28,7 @@ export function GoalFundsDialog({
   }, [goal, mode])
 
   const isDeposit = mode === 'deposit'
-  const max = goal ? (isDeposit ? Math.max(0, savings.free) : goal.saved) : 0
+  const max = goal ? (isDeposit ? maxDepositFor(goal) : goal.saved) : 0
   const value = roundMoney(Number.parseFloat(amount) || 0)
   const exceeds = value > max + 0.001
 
@@ -38,7 +38,7 @@ export function GoalFundsDialog({
     if (exceeds) {
       return setError(
         isDeposit
-          ? `Solo tienes ${formatMoney(max)} de ahorro libre disponible.`
+          ? `Solo puedes aportar hasta ${formatMoney(max)} a esta meta.`
           : `Esta meta solo tiene ${formatMoney(max)} asignados.`,
       )
     }
@@ -59,9 +59,11 @@ export function GoalFundsDialog({
       onClose={onClose}
       title={isDeposit ? `Aportar a ${goal?.name ?? ''}` : `Retirar de ${goal?.name ?? ''}`}
       description={
-        isDeposit
-          ? 'El aporte se toma de tu ahorro libre sin asignar.'
-          : 'El retiro regresa a tu ahorro libre sin asignar.'
+        goal?.isAuto
+          ? 'Al mover dinero, esta meta pasa a modo Manual con el nuevo monto y el resto se reparte entre las metas automáticas.'
+          : isDeposit
+            ? 'El aporte se toma de tu ahorro disponible; las metas automáticas se reajustan.'
+            : 'El retiro regresa a tu ahorro y se reparte entre las metas automáticas.'
       }
     >
       <div className="flex flex-col gap-4">
@@ -102,7 +104,7 @@ export function GoalFundsDialog({
           <p className="rounded-xl bg-accent/12 px-3.5 py-2.5 text-sm font-medium text-accent" role="alert">
             {error ||
               (isDeposit
-                ? `Superas tu ahorro libre disponible (${formatMoney(max)}).`
+                ? `Superas el ahorro disponible para esta meta (${formatMoney(max)}).`
                 : `Esta meta solo tiene ${formatMoney(max)} asignados.`)}
           </p>
         )}
