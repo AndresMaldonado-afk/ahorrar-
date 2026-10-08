@@ -22,7 +22,7 @@ const legend = [
   { label: 'Ahorrado', className: 'bg-chart-3' },
 ]
 
-export function HistorySection() {
+export function HistorySection({ compact = false }: { compact?: boolean }) {
   const { transactions, contributions, monthlyStats, monthKey, getCategory } = useFinance()
   const [selected, setSelected] = useState(monthKey)
 
@@ -86,17 +86,18 @@ export function HistorySection() {
 
       <div className="flex items-end justify-between gap-2 sm:gap-4">
         {monthlyStats.map((m) => {
-          const isActive = m.key === activeMonth
+          const isActive = !compact && m.key === activeMonth
+          const Wrapper = compact ? 'div' : 'button'
           return (
-            <button
+            <Wrapper
               key={m.key}
-              type="button"
-              onClick={() => setSelected(m.key)}
-              aria-pressed={isActive}
+              {...(compact
+                ? { role: 'img' }
+                : { type: 'button' as const, onClick: () => setSelected(m.key), 'aria-pressed': isActive })}
               aria-label={`${monthLabel(m.key)}: ingresos ${formatMoney(m.income)}, gastos ${formatMoney(m.expenses)}, ahorrado ${formatMoney(m.saved)}`}
               className={cn(
                 'flex flex-1 flex-col items-center gap-2 rounded-2xl px-1 pb-2 pt-3 transition-colors',
-                isActive ? 'bg-secondary' : 'hover:bg-muted/60',
+                isActive ? 'bg-secondary' : !compact && 'hover:bg-muted/60',
               )}
             >
               <div className="flex h-40 w-full items-end justify-center gap-1">
@@ -116,11 +117,12 @@ export function HistorySection() {
               <span className={cn('text-xs font-medium', isActive ? 'text-foreground' : 'text-muted-foreground')}>
                 {m.label}
               </span>
-            </button>
+            </Wrapper>
           )
         })}
       </div>
 
+      {!compact && (
       <div className="flex flex-col gap-4 border-t border-border pt-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <label htmlFor="history-month" className="text-sm font-semibold">
@@ -200,6 +202,7 @@ export function HistorySection() {
           </ul>
         )}
       </div>
+      )}
     </section>
   )
 }

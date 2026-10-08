@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Receipt } from 'lucide-react'
+import { ChevronDown, Plus, Receipt } from 'lucide-react'
 import { formatMoney, formatDate, signedAmount } from '@/lib/finance-data'
 import { useFinance } from '@/components/finance-provider'
 import { cn } from '@/lib/utils'
@@ -20,9 +20,10 @@ export function RecentTransactions() {
         <button
           type="button"
           onClick={() => setNewMovementOpen(true)}
-          className="text-sm font-semibold text-primary hover:underline"
+          className="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
+          aria-label="Nuevo movimiento"
         >
-          + Nuevo
+          <Plus className="size-4.5" aria-hidden="true" />
         </button>
       </div>
 

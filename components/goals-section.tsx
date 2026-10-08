@@ -1,14 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, Lock, Minus, Pencil, Plus, Sparkles } from 'lucide-react'
+import Link from 'next/link'
+import { AlertTriangle, ArrowUpRight, Lock, Minus, Pencil, Plus, Sparkles } from 'lucide-react'
 import { useFinance } from '@/components/finance-provider'
 import { GoalFormDialog } from '@/components/goal-form-dialog'
 import { GoalFundsDialog, type FundsMode } from '@/components/goal-funds-dialog'
 import { formatGoalDeadline, formatMoney, type Goal } from '@/lib/finance-data'
 import { cn } from '@/lib/utils'
 
-export function GoalsSection() {
+export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
   const { goals, savings, loading, autoDistribution, setAutoDistribution, setGoalMode, maxDepositFor } = useFinance()
   const [formOpen, setFormOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
@@ -51,10 +52,27 @@ export function GoalsSection() {
   return (
     <section id="metas" className="flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-sm">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-display text-lg font-bold">Mis metas</h2>
-          <p className="text-sm text-muted-foreground">Cada aporte te acerca un poco más</p>
-        </div>
+        {linkToPage ? (
+          <Link
+            href="/metas"
+            aria-label="Ir a la sección Metas"
+            className="group -m-2 rounded-2xl p-2 transition-colors hover:bg-muted/60"
+          >
+            <h2 className="flex items-center gap-1.5 font-display text-lg font-bold">
+              Mis metas
+              <ArrowUpRight
+                className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary"
+                aria-hidden="true"
+              />
+            </h2>
+            <p className="text-sm text-muted-foreground">Cada aporte te acerca un poco más</p>
+          </Link>
+        ) : (
+          <div>
+            <h2 className="font-display text-lg font-bold">Mis metas</h2>
+            <p className="text-sm text-muted-foreground">Cada aporte te acerca un poco más</p>
+          </div>
+        )}
         <button
           type="button"
           onClick={openCreate}
