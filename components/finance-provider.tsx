@@ -1,15 +1,22 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   categoryPalette,
+  currentMonthKey,
   distributeGoals,
+  lastMonthKeys,
+  localISO,
+  monthKeyOf,
+  monthShort,
   planGoalRebalance,
   roundMoney,
   type Category,
   type CategoryType,
   type Goal,
+  type GoalContribution,
+  type MonthlyStat,
   type Product,
   type Transaction,
 } from '@/lib/finance-data'
@@ -83,7 +90,16 @@ type CurrentUser = {
 
 type FinanceContextValue = {
   categories: Category[]
+  /** Every transaction the user has ever saved (history is never deleted). */
   transactions: Transaction[]
+  /** Only the transactions of the current month; drives the dashboard counters. */
+  monthTransactions: Transaction[]
+  /** Savings ledger: money moved into/out of goals, one row per change. */
+  contributions: GoalContribution[]
+  /** YYYY-MM of the month currently in progress. */
+  monthKey: string
+  /** Income, expenses and amount saved in goals for the last 6 months, oldest first. */
+  monthlyStats: MonthlyStat[]
   budgets: DerivedBudget[]
   summary: {
     balance: number
@@ -152,6 +168,26 @@ type TransactionRow = {
   transaction_items: { id: string; name: string; price: number }[] | null
 }
 
+type ContributionRow = {
+  id: string
+  goal_id: string | null
+  title: string
+  amount: number | string
+  date: string
+}
+
+const contributionColumns = 'id, goal_id, title, amount, date'
+
+function mapContribution(row: ContributionRow): GoalContribution {
+  return {
+    id: row.id,
+    goalId: row.goal_id,
+    title: row.title,
+    amount: Number(row.amount ?? 0),
+    date: row.date,
+  }
+}
+
 function mapCategory(row: CategoryRow): Category {
   return {
     id: row.id,
@@ -183,6 +219,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [goalRows, setGoalRows] = useState<GoalRow[]>([])
+  const [contributions, setContributions] = useState<GoalContribution[]>([])
+  const [monthKey, setMonthKey] = useState(currentMonthKey)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newMovementOpen, setNewMovementOpen] = useState(false)
@@ -208,7 +246,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         name: authData.user.user_metadata?.full_name || authData.user.email?.split('@')[0] || 'ahorrador',
       }
 
-      const [categoriesRes, transactionsRes, goalsRes] = await Promise.all([
+      const [categoriesRes, transactionsRes, goalsRes, contributionsRes] = await Promise.all([
         supabase
           .from('categories')
           .select('id, name, type, monthly_limit, emoji, color')
@@ -225,11 +263,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           .select(goalColumns)
           .eq('user_id', currentUser.id)
           .order('created_at', { ascending: true }),
+        supabase
+          .from('goal_contributions')
+          .select(contributionColumns)
+          .eq('user_id', currentUser.id)
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false }),
       ])
 
       if (!active) return
 
-      if (categoriesRes.error || transactionsRes.error || goalsRes.error) {
+      if (categoriesRes.error || transactionsRes.error || goalsRes.error || contributionsRes.error) {
         setError('No pudimos cargar tu información. Intenta de nuevo en un momento.')
         setLoading(false)
         return
@@ -239,6 +283,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setCategories((categoriesRes.data ?? []).map(mapCategory))
       setTransactions((transactionsRes.data ?? []).map((row) => mapTransaction(row as unknown as TransactionRow)))
       setGoalRows((goalsRes.data ?? []) as GoalRow[])
+      setContributions(((contributionsRes.data ?? []) as ContributionRow[]).map(mapContribution))
       setLoading(false)
     }
 
@@ -248,6 +293,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Month rollover: counters restart when the calendar month changes, history stays in Supabase.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setMonthKey((prev) => {
+        const next = currentMonthKey()
+        return next === prev ? prev : next
+      })
+    }, 60_000)
+    return () => window.clearInterval(id)
   }, [])
 
   const addCategory = async (input: NewCategoryInput) => {
@@ -428,9 +484,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const getCategory = (id: string) => categories.find((c) => c.id === id)
 
+  const monthTransactions = useMemo(
+    () => transactions.filter((t) => monthKeyOf(t.date) === monthKey),
+    [transactions, monthKey],
+  )
+
   const budgets = useMemo<DerivedBudget[]>(() => {
     const totals = new Map<string, number>()
-    for (const t of transactions) {
+    for (const t of monthTransactions) {
       const category = categories.find((c) => c.id === t.categoryId)
       if (!category || category.type !== t.type) continue
       totals.set(t.categoryId, (totals.get(t.categoryId) ?? 0) + t.amount)
@@ -441,25 +502,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       limit: category.limit,
       color: category.color,
     }))
-  }, [categories, transactions])
+  }, [categories, monthTransactions])
 
-  const summary = useMemo(() => {
-    const income = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-    const expenses = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
-    const saved = income - expenses
-    const savingsRate = income > 0 ? Math.round((saved / income) * 100) : 0
-    return {
-      balance: saved,
-      income,
-      expenses,
-      saved,
-      savingsRate,
-      incomeCount: transactions.filter((t) => t.type === 'income').length,
-      expenseCount: transactions.filter((t) => t.type === 'expense').length,
-    }
-  }, [transactions])
+  const monthTotals = useMemo(() => {
+    const incomeTx = monthTransactions.filter((t) => t.type === 'income')
+    const expenseTx = monthTransactions.filter((t) => t.type === 'expense')
+    const income = roundMoney(incomeTx.reduce((s, t) => s + t.amount, 0))
+    const expenses = roundMoney(expenseTx.reduce((s, t) => s + t.amount, 0))
+    return { income, expenses, incomeCount: incomeTx.length, expenseCount: expenseTx.length }
+  }, [monthTransactions])
 
-  const totalSavings = roundMoney(summary.saved)
+  const totalSavings = roundMoney(monthTotals.income - monthTotals.expenses)
 
   const { goals, manualSum } = useMemo(() => {
     const base = goalRows.map(mapGoal)
@@ -483,6 +536,82 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [goals, manualSum, totalSavings])
 
   const autoDistribution = goals.length === 0 || goals.some((g) => g.isAuto)
+
+  // Balance total = (month income - month expenses) - money assigned to goals.
+  const summary = useMemo(() => {
+    const { income, expenses } = monthTotals
+    const saved = roundMoney(income - expenses)
+    return {
+      balance: roundMoney(saved - savings.allocated),
+      income,
+      expenses,
+      saved,
+      savingsRate: income > 0 ? Math.round((saved / income) * 100) : 0,
+      incomeCount: monthTotals.incomeCount,
+      expenseCount: monthTotals.expenseCount,
+    }
+  }, [monthTotals, savings.allocated])
+
+  const monthlyStats = useMemo<MonthlyStat[]>(() => {
+    return lastMonthKeys(monthKey, 6).map((key) => {
+      let income = 0
+      let expenses = 0
+      for (const t of transactions) {
+        if (monthKeyOf(t.date) !== key) continue
+        if (t.type === 'income') income += t.amount
+        else expenses += t.amount
+      }
+      const ledger = contributions
+        .filter((c) => monthKeyOf(c.date) === key)
+        .reduce((s, c) => s + c.amount, 0)
+      return {
+        key,
+        label: monthShort(key),
+        income: roundMoney(income),
+        expenses: roundMoney(expenses),
+        saved: key === monthKey ? Math.max(0, savings.allocated) : Math.max(0, roundMoney(ledger)),
+      }
+    })
+  }, [transactions, contributions, monthKey, savings.allocated])
+
+  // Keeps the ledger of the current month equal to what is assigned to goals right now,
+  // so past months retain a snapshot of what was saved.
+  const ledgerSyncing = useRef(false)
+  const ledgerFailedSignature = useRef<string | null>(null)
+  const monthLedgerSum = roundMoney(
+    contributions.filter((c) => monthKeyOf(c.date) === monthKey).reduce((s, c) => s + c.amount, 0),
+  )
+
+  useEffect(() => {
+    if (loading || !user || ledgerSyncing.current) return
+    const delta = roundMoney(savings.allocated - monthLedgerSum)
+    if (Math.abs(delta) < 0.01) {
+      ledgerFailedSignature.current = null
+      return
+    }
+    const signature = `${monthKey}:${delta}`
+    if (ledgerFailedSignature.current === signature) return
+
+    ledgerSyncing.current = true
+    supabase
+      .from('goal_contributions')
+      .insert({
+        user_id: user.id,
+        title: delta > 0 ? 'Aporte a metas' : 'Retiro de metas',
+        amount: delta,
+        date: localISO(),
+      })
+      .select(contributionColumns)
+      .single()
+      .then(({ data, error: insertError }) => {
+        ledgerSyncing.current = false
+        if (insertError || !data) {
+          ledgerFailedSignature.current = signature
+          return
+        }
+        setContributions((prev) => [mapContribution(data as ContributionRow), ...prev])
+      })
+  }, [loading, user, supabase, monthKey, monthLedgerSum, savings.allocated])
 
   const persistGoalUpdates = async (updates: GoalUpdate[]) => {
     if (!user || updates.length === 0) return
@@ -613,6 +742,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const value: FinanceContextValue = {
     categories,
     transactions,
+    monthTransactions,
+    contributions,
+    monthKey,
+    monthlyStats,
     budgets,
     summary,
     goals,

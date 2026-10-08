@@ -18,8 +18,71 @@ export function formatDate(iso: string) {
   return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' }).format(date)
 }
 
+/** Local calendar date as YYYY-MM-DD (avoids the UTC shift of toISOString). */
+export function localISO(date: Date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+  return localISO()
+}
+
+/** Month key in YYYY-MM format. */
+export function currentMonthKey() {
+  return localISO().slice(0, 7)
+}
+
+export function monthKeyOf(iso: string) {
+  return iso.slice(0, 7)
+}
+
+/** The `count` month keys ending at `endKey`, oldest first. */
+export function lastMonthKeys(endKey: string, count: number) {
+  const [year, month] = endKey.split('-').map(Number)
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(year, month - 1 - (count - 1 - i), 1)
+    return localISO(d).slice(0, 7)
+  })
+}
+
+function capitalize(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+/** "Octubre 2026" */
+export function monthLabel(key: string) {
+  const [year, month] = key.split('-').map(Number)
+  const name = new Intl.DateTimeFormat('es-MX', { month: 'long' }).format(new Date(year, month - 1, 1))
+  return `${capitalize(name)} ${year}`
+}
+
+/** "Oct" */
+export function monthShort(key: string) {
+  const [year, month] = key.split('-').map(Number)
+  const name = new Intl.DateTimeFormat('es-MX', { month: 'short' })
+    .format(new Date(year, month - 1, 1))
+    .replace('.', '')
+  return capitalize(name)
+}
+
+/** One entry of the savings ledger: money moved into (+) or out of (-) goals. */
+export type GoalContribution = {
+  id: string
+  goalId: string | null
+  title: string
+  amount: number
+  date: string
+}
+
+export type MonthlyStat = {
+  key: string
+  label: string
+  income: number
+  expenses: number
+  saved: number
 }
 
 /** Palette used when the user creates a new category. */
@@ -109,15 +172,6 @@ function offsetISO(daysAgo: number) {
   d.setDate(d.getDate() - daysAgo)
   return d.toISOString().slice(0, 10)
 }
-
-export const cashflow = [
-  { month: 'Abr', income: 28000, expenses: 21000 },
-  { month: 'May', income: 30000, expenses: 22500 },
-  { month: 'Jun', income: 29500, expenses: 20000 },
-  { month: 'Jul', income: 31000, expenses: 19000 },
-  { month: 'Ago', income: 30500, expenses: 21500 },
-  { month: 'Sep', income: 32000, expenses: 19750 },
-]
 
 export type Goal = {
   id: string

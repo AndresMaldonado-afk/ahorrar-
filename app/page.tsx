@@ -5,7 +5,7 @@ import { FinanceProvider, useFinance } from '@/components/finance-provider'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { GreetingHeader } from '@/components/greeting-header'
 import { BalanceCards } from '@/components/balance-cards'
-import { CashflowChart } from '@/components/cashflow-chart'
+import { HistorySection } from '@/components/history-section'
 import { GoalsSection } from '@/components/goals-section'
 import { BudgetBreakdown } from '@/components/budget-breakdown'
 import { RecentTransactions } from '@/components/recent-transactions'
@@ -52,8 +52,8 @@ function Dashboard() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="flex flex-col gap-6 lg:col-span-2">
-              <CashflowChart />
               <BudgetBreakdown />
+              <HistorySection />
             </div>
             <div className="flex flex-col gap-6">
               <GoalsSection />
