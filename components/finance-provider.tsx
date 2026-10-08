@@ -5,7 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import {
   categoryPalette,
   currentMonthKey,
+  autoPercentSum,
   distributeGoals,
+  type DistributionMode,
   lastMonthKeys,
   localISO,
   monthKeyOf,
@@ -28,6 +30,8 @@ export type GoalInput = {
   deadline: string | null
   saved: number
   isAuto: boolean
+  /** Share (0-100) of the unlocked savings; only used in "percent" distribution mode. */
+  percentage?: number
 }
 
 type GoalRow = {
@@ -38,11 +42,20 @@ type GoalRow = {
   current_amount: number | string
   deadline: string | null
   is_auto: boolean
+  manual_amount: number | string | null
+  percentage: number | string | null
 }
 
-type GoalUpdate = { id: string; current_amount: number; is_auto?: boolean }
+type GoalUpdate = {
+  id: string
+  current_amount?: number
+  is_auto?: boolean
+  manual_amount?: number | null
+  percentage?: number
+}
 
-const goalColumns = 'id, title, emoji, target_amount, current_amount, deadline, is_auto'
+const goalColumns =
+  'id, title, emoji, target_amount, current_amount, deadline, is_auto, manual_amount, percentage'
 
 function mapGoal(row: GoalRow, index: number): Goal {
   const stored = Number(row.current_amount ?? 0)
@@ -54,6 +67,8 @@ function mapGoal(row: GoalRow, index: number): Goal {
     saved: stored,
     storedSaved: stored,
     isAuto: row.is_auto ?? true,
+    manualAmount: row.manual_amount == null ? null : Number(row.manual_amount),
+    percentage: Number(row.percentage ?? 0),
     deadline: row.deadline,
     color: categoryPalette[index % categoryPalette.length],
   }
@@ -122,6 +137,11 @@ type FinanceContextValue = {
   autoDistribution: boolean
   setAutoDistribution: (enabled: boolean) => Promise<void>
   setGoalMode: (id: string, isAuto: boolean) => Promise<void>
+  /** How auto goals share the unlocked savings: equally (1/N) or by custom percentages. */
+  distributionMode: DistributionMode
+  setDistributionMode: (mode: DistributionMode) => Promise<void>
+  /** Saves the percentage of several goals at once (the auto goals must add up to 100% or less). */
+  setGoalPercentages: (percentages: Record<string, number>) => Promise<void>
   maxDepositFor: (goal: Goal) => number
   addGoal: (input: GoalInput, options?: { rebalance?: boolean }) => Promise<void>
   updateGoal: (id: string, input: GoalInput, options?: { rebalance?: boolean }) => Promise<void>
@@ -219,6 +239,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [goalRows, setGoalRows] = useState<GoalRow[]>([])
+  const [distributionMode, setDistributionModeState] = useState<DistributionMode>('equal')
   const [contributions, setContributions] = useState<GoalContribution[]>([])
   const [monthKey, setMonthKey] = useState(currentMonthKey)
   const [loading, setLoading] = useState(true)
@@ -246,7 +267,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         name: authData.user.user_metadata?.full_name || authData.user.email?.split('@')[0] || 'ahorrador',
       }
 
-      const [categoriesRes, transactionsRes, goalsRes, contributionsRes] = await Promise.all([
+      const [categoriesRes, transactionsRes, goalsRes, contributionsRes, settingsRes] = await Promise.all([
         supabase
           .from('categories')
           .select('id, name, type, monthly_limit, emoji, color')
@@ -269,6 +290,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           .eq('user_id', currentUser.id)
           .order('date', { ascending: false })
           .order('created_at', { ascending: false }),
+        supabase.from('goal_settings').select('distribution_mode').eq('user_id', currentUser.id).maybeSingle(),
       ])
 
       if (!active) return
@@ -283,6 +305,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setCategories((categoriesRes.data ?? []).map(mapCategory))
       setTransactions((transactionsRes.data ?? []).map((row) => mapTransaction(row as unknown as TransactionRow)))
       setGoalRows((goalsRes.data ?? []) as GoalRow[])
+      setDistributionModeState(settingsRes.data?.distribution_mode === 'percent' ? 'percent' : 'equal')
       setContributions(((contributionsRes.data ?? []) as ContributionRow[]).map(mapContribution))
       setLoading(false)
     }
@@ -516,12 +539,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const { goals, manualSum } = useMemo(() => {
     const base = goalRows.map(mapGoal)
-    const { amounts, manualSum } = distributeGoals(base, totalSavings)
+    const { amounts, manualSum } = distributeGoals(base, totalSavings, distributionMode)
     return {
       goals: base.map((g) => ({ ...g, saved: amounts.get(g.id) ?? g.storedSaved })),
       manualSum,
     }
-  }, [goalRows, totalSavings])
+  }, [goalRows, totalSavings, distributionMode])
 
   const savings = useMemo(() => {
     const allocated = roundMoney(goals.reduce((s, g) => s + g.saved, 0))
@@ -637,7 +660,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (!input.name.trim()) throw new Error('Escribe un nombre para la meta')
     if (!(input.target > 0)) throw new Error('El monto objetivo debe ser mayor a 0')
     if (input.saved < 0) throw new Error('El monto asignado no puede ser negativo')
-    if (input.isAuto) return []
+    if (input.percentage !== undefined && (input.percentage < 0 || input.percentage > 100)) {
+      throw new Error('El porcentaje debe estar entre 0 y 100')
+    }
+    if (input.isAuto) {
+      if (distributionMode === 'percent') {
+        const others = goals.filter((g) => g.id !== goalId)
+        const total = autoPercentSum([...others, { isAuto: true, percentage: input.percentage ?? 0 }])
+        if (total > 100.001) throw new Error(`Los porcentajes de tus metas suman ${total}%. No pueden superar 100%.`)
+      }
+      return []
+    }
 
     const manualGoals = goals.filter((g) => !g.isAuto)
     const plan = planGoalRebalance({
@@ -650,9 +683,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (plan.kind === 'impossible' || !rebalance) {
       throw new Error('No tienes suficiente ahorro para fijar ese monto.')
     }
-    return plan.adjustments.map((a) => ({ id: a.id, current_amount: a.to }))
+    return plan.adjustments.map((a) => ({ id: a.id, current_amount: a.to, manual_amount: a.to }))
   }
 
+  // manual_amount is only written while the goal is manual, so an auto goal never loses the amount the user fixed.
   const goalPayload = (input: GoalInput) => ({
     title: input.name.trim(),
     emoji: input.emoji || '🎯',
@@ -660,15 +694,37 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     current_amount: input.isAuto ? 0 : roundMoney(input.saved),
     is_auto: input.isAuto,
     deadline: input.deadline || null,
+    ...(input.isAuto ? {} : { manual_amount: roundMoney(input.saved) }),
+    ...(input.percentage === undefined ? {} : { percentage: roundMoney(input.percentage) }),
   })
 
-  const freezeAmount = (goal: Goal) => ({ id: goal.id, current_amount: roundMoney(goal.saved), is_auto: false })
+  // Turns auto goals back into manual ones, restoring the amount each user fixed before (or freezing the
+  // current computed amount when there is none). If it no longer fits the savings, it is scaled down.
+  const restoreManualAmounts = (targets: Goal[]): GoalUpdate[] => {
+    const targetIds = new Set(targets.map((g) => g.id))
+    const lockedSum = goals.filter((g) => !g.isAuto && !targetIds.has(g.id)).reduce((s, g) => s + g.storedSaved, 0)
+    const available = Math.max(0, totalSavings - lockedSum)
+    const desired = new Map(targets.map((g) => [g.id, g.manualAmount ?? g.saved]))
+    const desiredSum = [...desired.values()].reduce((s, v) => s + v, 0)
+    const scale = desiredSum > available && desiredSum > 0 ? available / desiredSum : 1
+    return targets.map((g) => {
+      const amount = Math.floor((desired.get(g.id) ?? 0) * scale * 100) / 100
+      return { id: g.id, current_amount: amount, is_auto: false, manual_amount: g.manualAmount ?? amount }
+    })
+  }
+
+  const toAutoUpdate = (goal: Goal): GoalUpdate => ({
+    id: goal.id,
+    current_amount: 0,
+    is_auto: true,
+    manual_amount: roundMoney(goal.storedSaved),
+  })
 
   const setAutoDistribution = async (enabled: boolean) => {
     if (!user) throw new Error('No hay sesión activa')
     const updates = enabled
-      ? goals.filter((g) => !g.isAuto).map((g) => ({ id: g.id, current_amount: 0, is_auto: true }))
-      : goals.filter((g) => g.isAuto).map(freezeAmount)
+      ? goals.filter((g) => !g.isAuto).map(toAutoUpdate)
+      : restoreManualAmounts(goals.filter((g) => g.isAuto))
     await persistGoalUpdates(updates)
   }
 
@@ -676,7 +732,33 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (!user) throw new Error('No hay sesión activa')
     const goal = goals.find((g) => g.id === id)
     if (!goal || goal.isAuto === isAuto) return
-    await persistGoalUpdates([isAuto ? { id, current_amount: 0, is_auto: true } : freezeAmount(goal)])
+    await persistGoalUpdates(isAuto ? [toAutoUpdate(goal)] : restoreManualAmounts([goal]))
+  }
+
+  const setDistributionMode = async (mode: DistributionMode) => {
+    if (!user) throw new Error('No hay sesión activa')
+    if (mode === distributionMode) return
+    const { error: upsertError } = await supabase
+      .from('goal_settings')
+      .upsert({ user_id: user.id, distribution_mode: mode, updated_at: new Date().toISOString() })
+    if (upsertError) throw new Error('No se pudo cambiar el modo de reparto. Intenta de nuevo.')
+    setDistributionModeState(mode)
+  }
+
+  const setGoalPercentages = async (percentages: Record<string, number>) => {
+    if (!user) throw new Error('No hay sesión activa')
+    const next = goals.map((g) => ({
+      ...g,
+      percentage: percentages[g.id] === undefined ? g.percentage : roundMoney(percentages[g.id]),
+    }))
+    if (next.some((g) => g.percentage < 0 || g.percentage > 100)) {
+      throw new Error('Cada porcentaje debe estar entre 0 y 100')
+    }
+    const total = autoPercentSum(next)
+    if (total > 100.001) throw new Error(`Los porcentajes suman ${total}%. No pueden superar 100%.`)
+    await persistGoalUpdates(
+      next.filter((g) => percentages[g.id] !== undefined).map((g) => ({ id: g.id, percentage: g.percentage })),
+    )
   }
 
   const addGoal = async (input: GoalInput, options?: { rebalance?: boolean }) => {
@@ -724,9 +806,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (amount < 0 && Math.abs(amount) > goal.saved + 0.001) {
       throw new Error('No puedes retirar más de lo que tiene la meta.')
     }
-    await persistGoalUpdates([
-      { id, current_amount: Math.max(0, roundMoney(goal.saved + amount)), is_auto: false },
-    ])
+    const next = Math.max(0, roundMoney(goal.saved + amount))
+    await persistGoalUpdates([{ id, current_amount: next, is_auto: false, manual_amount: next }])
   }
 
   const maxDepositFor = (goal: Goal) =>
@@ -753,6 +834,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     autoDistribution,
     setAutoDistribution,
     setGoalMode,
+    distributionMode,
+    setDistributionMode,
+    setGoalPercentages,
     maxDepositFor,
     addGoal,
     updateGoal,

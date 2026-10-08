@@ -5,6 +5,7 @@ import { AlertTriangle, Lock, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import { useFinance } from '@/components/finance-provider'
 import {
+  autoPercentSum,
   distributeGoals,
   formatMoney,
   goalEmojiOptions,
@@ -16,9 +17,10 @@ import {
 import { cn } from '@/lib/utils'
 
 export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose: () => void; goal: Goal | null }) {
-  const { goals, savings, autoDistribution, addGoal, updateGoal, deleteGoal } = useFinance()
+  const { goals, savings, autoDistribution, distributionMode, addGoal, updateGoal, deleteGoal } = useFinance()
   const isEdit = Boolean(goal)
   const [isAuto, setIsAuto] = useState(true)
+  const [percentage, setPercentage] = useState('')
 
   const [name, setName] = useState('')
   const [emoji, setEmoji] = useState('🎯')
@@ -36,7 +38,8 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
     setEmoji(goal?.emoji ?? '🎯')
     setTarget(goal ? String(goal.target) : '')
     setDeadline(goal?.deadline ?? '')
-    setSaved(goal ? String(goal.saved) : '')
+    setSaved(goal ? String(goal.manualAmount ?? goal.saved) : '')
+    setPercentage(goal ? String(goal.percentage) : '0')
     setIsAuto(goal ? goal.isAuto : autoDistribution)
     setRebalance(false)
     setConfirmDelete(false)
@@ -46,6 +49,7 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
 
   const targetValue = Number.parseFloat(target) || 0
   const savedValue = Math.max(0, Number.parseFloat(saved) || 0)
+  const percentValue = Math.max(0, Number.parseFloat(percentage) || 0)
   const pct = targetValue > 0 ? Math.min(100, Math.round((savedValue / targetValue) * 100)) : 0
   const availableForGoal = roundMoney(
     (goal && !goal.isAuto ? goal.storedSaved : 0) + Math.max(0, savings.unlocked),
@@ -64,14 +68,22 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
   const autoPreview = useMemo(() => {
     if (!isAuto || targetValue <= 0) return null
     const draftId = goal?.id ?? '__draft__'
-    const draft = { id: draftId, isAuto: true, storedSaved: 0, target: targetValue }
+    const draft = { id: draftId, isAuto: true, storedSaved: 0, target: targetValue, percentage: percentValue }
     const others = goals.filter((g) => g.id !== draftId)
-    const { amounts } = distributeGoals([...others, draft], savings.total)
+    const { amounts } = distributeGoals([...others, draft], savings.total, distributionMode)
     const amount = amounts.get(draftId) ?? 0
     return { amount, pct: Math.min(100, Math.round((amount / targetValue) * 100)), sharedWith: others.filter((g) => g.isAuto).length + 1 }
-  }, [isAuto, targetValue, goal, goals, savings.total])
+  }, [isAuto, targetValue, goal, goals, savings.total, distributionMode, percentValue])
 
-  const blocked = plan.kind === 'impossible' || (plan.kind === 'rebalance' && !rebalance)
+  const percentMode = isAuto && distributionMode === 'percent'
+  const percentTotal = useMemo(() => {
+    const others = goals.filter((g) => g.id !== goal?.id)
+    return autoPercentSum([...others, { isAuto: true, percentage: percentValue }])
+  }, [goals, goal, percentValue])
+  const percentOver = percentMode && (percentTotal > 100.001 || percentValue > 100)
+
+  const blocked =
+    plan.kind === 'impossible' || (plan.kind === 'rebalance' && !rebalance) || percentOver
 
   const inputClass =
     'w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm font-medium outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20'
@@ -97,6 +109,7 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
         deadline: deadline || null,
         saved: isAuto ? 0 : savedValue,
         isAuto,
+        percentage: percentMode ? percentValue : undefined,
       }
       if (isEdit && goal) await updateGoal(goal.id, payload, { rebalance })
       else await addGoal(payload, { rebalance })
@@ -227,11 +240,44 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
           </div>
 
           {isAuto ? (
-            <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
-              {autoPreview
-                ? `Recibirá ${formatMoney(autoPreview.amount)} (${autoPreview.pct}% del objetivo), una parte igual del ahorro disponible entre ${autoPreview.sharedWith} ${autoPreview.sharedWith === 1 ? 'meta automática' : 'metas automáticas'}. Se recalcula solo cuando cambian tus ingresos, gastos o metas.`
-                : 'Escribe el monto objetivo para ver cuánto recibirá esta meta del reparto equitativo.'}
-            </p>
+            <>
+              {percentMode && (
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="goal-percentage" className={labelClass}>
+                    Porcentaje del ahorro libre
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="goal-percentage"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={percentage}
+                      onChange={(e) => setPercentage(e.target.value)}
+                      aria-invalid={percentOver}
+                      className={cn(inputClass, 'pr-8', percentOver && 'border-accent focus:border-accent focus:ring-accent/20')}
+                    />
+                    <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
+                      %
+                    </span>
+                  </div>
+                  <p className={cn('text-xs font-semibold', percentOver ? 'text-accent' : 'text-muted-foreground')} role={percentOver ? 'alert' : undefined}>
+                    {percentOver
+                      ? `Las metas automáticas sumarían ${percentTotal}%. No pueden superar 100%.`
+                      : `Suma de todas las metas automáticas: ${percentTotal}% de 100%`}
+                  </p>
+                </div>
+              )}
+              <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+                {autoPreview
+                  ? percentMode
+                    ? `Recibirá ${formatMoney(autoPreview.amount)} (${autoPreview.pct}% del objetivo): ${percentValue}% del ahorro disponible. Se recalcula solo cuando cambian tus ingresos, gastos o metas.`
+                    : `Recibirá ${formatMoney(autoPreview.amount)} (${autoPreview.pct}% del objetivo), una parte igual del ahorro disponible entre ${autoPreview.sharedWith} ${autoPreview.sharedWith === 1 ? 'meta automática' : 'metas automáticas'}. Se recalcula solo cuando cambian tus ingresos, gastos o metas.`
+                  : 'Escribe el monto objetivo para ver cuánto recibirá esta meta del reparto automático.'}
+              </p>
+            </>
           ) : (
           <>
           <div className="flex items-baseline justify-between gap-2">

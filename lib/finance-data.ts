@@ -181,21 +181,38 @@ export type Goal = {
   saved: number
   /** Amount persisted in the database; only meaningful for manual goals. */
   storedSaved: number
-  /** Auto goals share the unlocked savings equally; manual goals keep their fixed amount. */
+  /** Auto goals share the unlocked savings (equally or by percentage); manual goals keep their fixed amount. */
   isAuto: boolean
+  /** Last amount the user fixed by hand; remembered while the goal is auto and restored when it goes back to manual. */
+  manualAmount: number | null
+  /** Share of the unlocked savings (0-100) used when the distribution mode is "percent". */
+  percentage: number
   target: number
   /** ISO date (YYYY-MM-DD) or null when the goal has no deadline. */
   deadline: string | null
   color: string
 }
 
-type DistributableGoal = Pick<Goal, 'id' | 'isAuto' | 'storedSaved' | 'target'>
+export type DistributionMode = 'equal' | 'percent'
+
+type DistributableGoal = Pick<Goal, 'id' | 'isAuto' | 'storedSaved' | 'target' | 'percentage'>
+
+/** Sum of the percentages assigned to auto goals (manual goals are locked and do not take a share). */
+export function autoPercentSum(goals: Pick<Goal, 'isAuto' | 'percentage'>[]) {
+  return Math.round(goals.filter((g) => g.isAuto).reduce((s, g) => s + g.percentage, 0) * 100) / 100
+}
 
 /**
- * Manual goals keep their fixed amount. Whatever savings remain are split equally (1/N) among
- * auto goals; a goal never receives more than its target, and the excess flows to the rest.
+ * Manual goals keep their fixed amount. Whatever savings remain are shared among auto goals:
+ * - "equal": split equally (1/N); a goal never receives more than its target and the excess flows to the rest.
+ * - "percent": each goal gets its percentage of the remaining savings (capped at its target).
+ *   If the percentages add up to more than 100 they are scaled down so nothing is over-allocated.
  */
-export function distributeGoals(goals: DistributableGoal[], totalSavings: number) {
+export function distributeGoals(
+  goals: DistributableGoal[],
+  totalSavings: number,
+  mode: DistributionMode = 'equal',
+) {
   const amounts = new Map<string, number>()
   let manualSum = 0
   for (const goal of goals) {
@@ -208,6 +225,19 @@ export function distributeGoals(goals: DistributableGoal[], totalSavings: number
   }
 
   let pool = Math.max(0, totalSavings - manualSum)
+
+  if (mode === 'percent') {
+    const sum = goals.filter((g) => g.isAuto).reduce((s, g) => s + g.percentage, 0)
+    const scale = sum > 100 ? 100 / sum : 1
+    for (const goal of goals) {
+      if (!goal.isAuto) continue
+      const share = (pool * goal.percentage * scale) / 100
+      const amount = goal.target > 0 ? Math.min(goal.target, share) : 0
+      amounts.set(goal.id, Math.floor(amount * 100) / 100)
+    }
+    return { amounts, manualSum: roundMoney(manualSum) }
+  }
+
   let pending = goals.filter((g) => g.isAuto && g.target > 0)
 
   while (pending.length > 0 && pool > 0.004) {

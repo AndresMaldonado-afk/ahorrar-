@@ -5,12 +5,23 @@ import Link from 'next/link'
 import { AlertTriangle, ArrowUpRight, Lock, Minus, Pencil, Plus, Sparkles } from 'lucide-react'
 import { useFinance } from '@/components/finance-provider'
 import { GoalFormDialog } from '@/components/goal-form-dialog'
+import { GoalPercentPanel } from '@/components/goal-percent-panel'
 import { GoalFundsDialog, type FundsMode } from '@/components/goal-funds-dialog'
 import { formatGoalDeadline, formatMoney, type Goal } from '@/lib/finance-data'
 import { cn } from '@/lib/utils'
 
 export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
-  const { goals, savings, loading, autoDistribution, setAutoDistribution, setGoalMode, maxDepositFor } = useFinance()
+  const {
+    goals,
+    savings,
+    loading,
+    autoDistribution,
+    setAutoDistribution,
+    setGoalMode,
+    distributionMode,
+    setDistributionMode,
+    maxDepositFor,
+  } = useFinance()
   const [formOpen, setFormOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [fundsGoal, setFundsGoal] = useState<Goal | null>(null)
@@ -92,7 +103,7 @@ export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
             {goals.length === 0
               ? 'Tu ahorro se repartirá en partes iguales entre tus metas.'
               : autoCount > 0
-                ? `${formatMoney(Math.max(0, savings.unlocked))} repartidos entre ${autoCount} ${autoCount === 1 ? 'meta automática' : 'metas automáticas'}`
+                ? `${formatMoney(Math.max(0, savings.unlocked))} ${distributionMode === 'percent' ? 'repartidos por porcentaje entre' : 'repartidos en partes iguales entre'} ${autoCount} ${autoCount === 1 ? 'meta automática' : 'metas automáticas'}`
                 : 'Todas tus metas tienen montos fijos (manual).'}
           </span>
         </div>
@@ -116,6 +127,46 @@ export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
           />
         </button>
       </div>
+
+      {autoDistribution && goals.length > 0 && (
+        <>
+          <div className="flex flex-col gap-2">
+            <p id="distribution-mode-label" className="text-xs font-semibold text-muted-foreground">
+              Modo de reparto
+            </p>
+            <div
+              role="radiogroup"
+              aria-labelledby="distribution-mode-label"
+              className="grid grid-cols-2 gap-1 rounded-xl bg-muted/60 p-1"
+            >
+              {(
+                [
+                  { value: 'equal', label: 'Equitativo' },
+                  { value: 'percent', label: 'Por porcentajes' },
+                ] as const
+              ).map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={distributionMode === value}
+                  disabled={pending !== null}
+                  onClick={() => runModeChange('mode', () => setDistributionMode(value))}
+                  className={cn(
+                    'rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-60',
+                    distributionMode === value
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {distributionMode === 'percent' && <GoalPercentPanel />}
+        </>
+      )}
 
       {modeError && (
         <p className="rounded-xl bg-accent/12 px-3.5 py-2.5 text-sm font-medium text-accent" role="alert">
@@ -196,7 +247,13 @@ export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
                           type="button"
                           onClick={() => runModeChange(goal.id, () => setGoalMode(goal.id, !goal.isAuto))}
                           disabled={pending !== null}
-                          title={goal.isAuto ? 'Fijar el monto actual (pasar a Manual)' : 'Volver a reparto automático'}
+                          title={
+                            goal.isAuto
+                              ? goal.manualAmount !== null
+                                ? `Pasar a Manual (recupera tu monto fijo de ${formatMoney(goal.manualAmount)})`
+                                : 'Fijar el monto actual (pasar a Manual)'
+                              : 'Volver a reparto automático (tu monto manual se recuerda)'
+                          }
                           aria-label={`${goal.name}: modo ${goal.isAuto ? 'Automático' : 'Manual'}. Cambiar a ${goal.isAuto ? 'Manual' : 'Automático'}`}
                           className={cn(
                             'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold transition-colors disabled:opacity-60',
@@ -210,7 +267,13 @@ export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
                           ) : (
                             <Lock className="size-3" aria-hidden="true" />
                           )}
-                          {pending === goal.id ? '…' : goal.isAuto ? 'Auto' : 'Manual'}
+                          {pending === goal.id
+                            ? '…'
+                            : goal.isAuto
+                              ? distributionMode === 'percent'
+                                ? `Auto ${goal.percentage}%`
+                                : 'Auto'
+                              : 'Manual'}
                         </button>
                       </div>
                       <p className="text-xs text-muted-foreground">{formatGoalDeadline(goal.deadline)}</p>
