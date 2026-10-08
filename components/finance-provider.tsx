@@ -5,10 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import {
   categoryPalette,
   distributeGoals,
-  openingBalance,
   planGoalRebalance,
   roundMoney,
-  signedAmount,
   type Category,
   type CategoryType,
   type Goal,
@@ -450,9 +448,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const expenses = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
     const saved = income - expenses
     const savingsRate = income > 0 ? Math.round((saved / income) * 100) : 0
-    const balance = openingBalance + transactions.reduce((s, t) => s + signedAmount(t), 0)
     return {
-      balance,
+      balance: saved,
       income,
       expenses,
       saved,
