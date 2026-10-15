@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Plus_Jakarta_Sans, Bricolage_Grotesque } from 'next/font/google'
+import { ThemeProvider, themeInitScript } from '@/components/theme-provider'
 import './globals.css'
 
 const jakarta = Plus_Jakarta_Sans({
@@ -23,7 +24,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light',
+  colorScheme: 'light dark',
   themeColor: '#0f9d6f',
 }
 
@@ -33,9 +34,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es" className={`${jakarta.variable} ${bricolage.variable} bg-background`}>
+    <html lang="es" suppressHydrationWarning className={`${jakarta.variable} ${bricolage.variable} bg-background`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="font-sans antialiased">
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

@@ -50,7 +50,7 @@ export function BalanceCards() {
                   ? cn(
                       'flex min-w-0 flex-col gap-3 rounded-3xl p-4 shadow-sm transition-colors sm:p-5',
                       negative
-                        ? 'bg-destructive text-white'
+                        ? 'bg-destructive text-primary-foreground'
                         : 'bg-primary text-primary-foreground',
                     )
                   : 'flex min-w-0 flex-col gap-3 rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-5',
