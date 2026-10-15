@@ -2,10 +2,13 @@
 
 import { Wallet, TrendingUp, TrendingDown, PiggyBank, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { formatMoney } from '@/lib/finance-data'
+import { cn } from '@/lib/utils'
 import { useFinance } from '@/components/finance-provider'
 
 export function BalanceCards() {
   const { summary } = useFinance()
+
+  const negative = summary.balance < 0
 
   const cards = [
     {
@@ -13,7 +16,7 @@ export function BalanceCards() {
       value: summary.balance,
       icon: Wallet,
       trend: `${summary.savingsRate}% ahorro`,
-      up: summary.balance >= 0,
+      up: !negative,
       highlight: true,
     },
     {
@@ -44,7 +47,12 @@ export function BalanceCards() {
               key={card.label}
               className={[
                 card.highlight
-                  ? 'flex min-w-0 flex-col gap-3 rounded-3xl bg-primary p-4 text-primary-foreground shadow-sm sm:p-5'
+                  ? cn(
+                      'flex min-w-0 flex-col gap-3 rounded-3xl p-4 shadow-sm transition-colors sm:p-5',
+                      negative
+                        ? 'bg-destructive text-white'
+                        : 'bg-primary text-primary-foreground',
+                    )
                   : 'flex min-w-0 flex-col gap-3 rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-5',
                 index === 0 ? 'min-[460px]:col-span-2 lg:col-span-1' : '',
               ].join(' ')}
@@ -79,14 +87,20 @@ export function BalanceCards() {
               <div className="flex flex-col gap-0.5">
                 <p
                   className={
-                    card.highlight ? 'text-sm text-primary-foreground/80' : 'text-sm text-muted-foreground'
+                    card.highlight ? 'text-sm opacity-80' : 'text-sm text-muted-foreground'
                   }
                 >
                   {card.label}
                 </p>
                 <p className="font-display text-2xl font-extrabold tracking-tight break-words">
+                  {card.value < 0 ? '-' : ''}
                   {formatMoney(card.value)}
                 </p>
+                {card.highlight && negative && (
+                  <p className="text-xs leading-relaxed opacity-90 text-pretty">
+                    Tus gastos superan tus ingresos. No puedes destinar dinero a tus metas hasta volver a números positivos.
+                  </p>
+                )}
               </div>
             </div>
           )
@@ -98,13 +112,14 @@ export function BalanceCards() {
 }
 
 function SavedCard() {
-  const { savings } = useFinance()
+  const { savings, summary } = useFinance()
 
-  const fund = Math.max(savings.total, 0)
-  const inGoals = Math.min(Math.max(savings.allocated, 0), fund)
-  const available = fund - inGoals
+  // "Ahorrado" is only what the user has assigned to goals; the rest of the money stays in the balance.
+  const inGoals = Math.max(savings.allocated, 0)
+  const available = Math.max(summary.balance, 0)
+  const fund = inGoals + available
   const goalsPct = fund > 0 ? Math.round((inGoals / fund) * 100) : 0
-  const availablePct = 100 - goalsPct
+  const availablePct = fund > 0 ? 100 - goalsPct : 0
 
   return (
     <section
@@ -119,12 +134,12 @@ function SavedCard() {
           <div className="flex min-w-0 flex-col gap-0.5">
             <p className="text-sm text-muted-foreground">Ahorrado</p>
             <p className="font-display text-2xl font-extrabold tracking-tight break-words">
-              {formatMoney(fund)}
+              {formatMoney(inGoals)}
             </p>
           </div>
         </div>
         <span className="shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-semibold text-secondary-foreground">
-          100%
+          {goalsPct}% en metas
         </span>
       </div>
 
