@@ -1,15 +1,27 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, Lock, Minus, Pencil, Plus, Sparkles } from 'lucide-react'
+import Link from 'next/link'
+import { AlertTriangle, ArrowUpRight, Lock, Minus, Pencil, Plus, Sparkles } from 'lucide-react'
 import { useFinance } from '@/components/finance-provider'
 import { GoalFormDialog } from '@/components/goal-form-dialog'
+import { GoalPercentPanel } from '@/components/goal-percent-panel'
 import { GoalFundsDialog, type FundsMode } from '@/components/goal-funds-dialog'
 import { formatGoalDeadline, formatMoney, type Goal } from '@/lib/finance-data'
 import { cn } from '@/lib/utils'
 
-export function GoalsSection() {
-  const { goals, savings, loading, autoDistribution, setAutoDistribution, setGoalMode, maxDepositFor } = useFinance()
+export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
+  const {
+    goals,
+    savings,
+    loading,
+    autoDistribution,
+    setAutoDistribution,
+    setGoalMode,
+    distributionMode,
+    setDistributionMode,
+    maxDepositFor,
+  } = useFinance()
   const [formOpen, setFormOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [fundsGoal, setFundsGoal] = useState<Goal | null>(null)
@@ -49,32 +61,49 @@ export function GoalsSection() {
   const freeAvailable = Math.max(0, savings.free)
 
   return (
-    <section id="metas" className="flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-display text-lg font-bold">Mis metas</h2>
-          <p className="text-sm text-muted-foreground">Cada aporte te acerca un poco más</p>
-        </div>
+    <section id="metas" className="flex min-w-0 flex-col gap-5 rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        {linkToPage ? (
+          <Link
+            href="/metas"
+            aria-label="Ir a la sección Metas"
+            className="group -m-2 rounded-2xl p-2 transition-colors hover:bg-muted/60"
+          >
+            <h2 className="flex items-center gap-1.5 font-display text-lg font-bold">
+              Mis metas
+              <ArrowUpRight
+                className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary"
+                aria-hidden="true"
+              />
+            </h2>
+            <p className="text-sm text-muted-foreground">Cada aporte te acerca un poco más</p>
+          </Link>
+        ) : (
+          <div>
+            <h2 className="font-display text-lg font-bold">Mis metas</h2>
+            <p className="text-sm text-muted-foreground">Cada aporte te acerca un poco más</p>
+          </div>
+        )}
         <button
           type="button"
           onClick={openCreate}
-          className="flex size-9 items-center justify-center rounded-xl bg-secondary text-secondary-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
           aria-label="Agregar meta"
         >
           <Plus className="size-4.5" aria-hidden="true" />
         </button>
       </div>
 
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3">
+      <div className="flex items-start justify-between gap-3 rounded-2xl border border-border px-3 py-3 sm:px-4">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span id="auto-distribution-label" className="text-sm font-semibold">
+          <span id="auto-distribution-label" className="text-sm font-semibold text-balance">
             Distribución Automática de Ahorros
           </span>
           <span className="text-xs leading-relaxed text-muted-foreground text-pretty">
             {goals.length === 0
               ? 'Tu ahorro se repartirá en partes iguales entre tus metas.'
               : autoCount > 0
-                ? `${formatMoney(Math.max(0, savings.unlocked))} repartidos entre ${autoCount} ${autoCount === 1 ? 'meta automática' : 'metas automáticas'}`
+                ? `${formatMoney(Math.max(0, savings.unlocked))} ${distributionMode === 'percent' ? 'repartidos por porcentaje entre' : 'repartidos en partes iguales entre'} ${autoCount} ${autoCount === 1 ? 'meta automática' : 'metas automáticas'}`
                 : 'Todas tus metas tienen montos fijos (manual).'}
           </span>
         </div>
@@ -99,25 +128,65 @@ export function GoalsSection() {
         </button>
       </div>
 
+      {autoDistribution && goals.length > 0 && (
+        <>
+          <div className="flex flex-col gap-2">
+            <p id="distribution-mode-label" className="text-xs font-semibold text-muted-foreground">
+              Modo de reparto
+            </p>
+            <div
+              role="radiogroup"
+              aria-labelledby="distribution-mode-label"
+              className="grid grid-cols-2 gap-1 rounded-xl bg-muted/60 p-1"
+            >
+              {(
+                [
+                  { value: 'equal', label: 'Equitativo' },
+                  { value: 'percent', label: 'Por porcentajes' },
+                ] as const
+              ).map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={distributionMode === value}
+                  disabled={pending !== null}
+                  onClick={() => runModeChange('mode', () => setDistributionMode(value))}
+                  className={cn(
+                    'rounded-lg px-2 py-2 text-center text-xs font-semibold leading-tight transition-colors disabled:opacity-60 min-[400px]:text-sm',
+                    distributionMode === value
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {distributionMode === 'percent' && <GoalPercentPanel />}
+        </>
+      )}
+
       {modeError && (
         <p className="rounded-xl bg-accent/12 px-3.5 py-2.5 text-sm font-medium text-accent" role="alert">
           {modeError}
         </p>
       )}
 
-      <dl className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/60 p-3 text-center">
-        <div className="flex flex-col gap-0.5">
+      <dl className="grid grid-cols-1 gap-2 rounded-2xl bg-muted/60 p-3 sm:grid-cols-3 sm:text-center">
+        <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5">
           <dt className="text-xs text-muted-foreground">Ahorro total</dt>
           <dd className={cn('text-sm font-bold', savings.total < 0 && 'text-accent')}>
             {savings.total < 0 ? '-' : ''}
             {formatMoney(savings.total)}
           </dd>
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5">
           <dt className="text-xs text-muted-foreground">En metas</dt>
           <dd className="text-sm font-bold">{formatMoney(savings.allocated)}</dd>
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5">
           <dt className="text-xs text-muted-foreground">Libre</dt>
           <dd className={cn('text-sm font-bold', savings.overfunded > 0 ? 'text-accent' : 'text-primary')}>
             {formatMoney(freeAvailable)}
@@ -163,7 +232,7 @@ export function GoalsSection() {
             const pct = Math.min(100, Math.round((goal.saved / goal.target) * 100))
             return (
               <li key={goal.id} className="flex flex-col gap-2.5">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <span
                       className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-secondary text-lg"
@@ -171,14 +240,20 @@ export function GoalsSection() {
                     >
                       {goal.emoji}
                     </span>
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <p className="truncate text-sm font-semibold">{goal.name}</p>
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <p className="text-sm font-semibold break-words">{goal.name}</p>
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                         <button
                           type="button"
                           onClick={() => runModeChange(goal.id, () => setGoalMode(goal.id, !goal.isAuto))}
                           disabled={pending !== null}
-                          title={goal.isAuto ? 'Fijar el monto actual (pasar a Manual)' : 'Volver a reparto automático'}
+                          title={
+                            goal.isAuto
+                              ? goal.manualAmount !== null
+                                ? `Pasar a Manual (recupera tu monto fijo de ${formatMoney(goal.manualAmount)})`
+                                : 'Fijar el monto actual (pasar a Manual)'
+                              : 'Volver a reparto automático (tu monto manual se recuerda)'
+                          }
                           aria-label={`${goal.name}: modo ${goal.isAuto ? 'Automático' : 'Manual'}. Cambiar a ${goal.isAuto ? 'Manual' : 'Automático'}`}
                           className={cn(
                             'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold transition-colors disabled:opacity-60',
@@ -192,15 +267,21 @@ export function GoalsSection() {
                           ) : (
                             <Lock className="size-3" aria-hidden="true" />
                           )}
-                          {pending === goal.id ? '…' : goal.isAuto ? 'Auto' : 'Manual'}
+                          {pending === goal.id
+                            ? '…'
+                            : goal.isAuto
+                              ? distributionMode === 'percent'
+                                ? `Auto ${goal.percentage}%`
+                                : 'Auto'
+                              : 'Manual'}
                         </button>
+                        <p className="text-xs text-muted-foreground">{formatGoalDeadline(goal.deadline)}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">{formatGoalDeadline(goal.deadline)}</p>
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-bold">{formatMoney(goal.saved)}</p>
-                    <p className="text-xs text-muted-foreground">de {formatMoney(goal.target)}</p>
+                  <div className="flex flex-wrap items-baseline gap-x-1.5 sm:shrink-0 sm:flex-col sm:items-end sm:gap-0 sm:text-right">
+                    <p className="text-sm font-bold whitespace-nowrap">{formatMoney(goal.saved)}</p>
+                    <p className="text-xs text-muted-foreground whitespace-nowrap">de {formatMoney(goal.target)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -210,9 +291,9 @@ export function GoalsSection() {
                       style={{ width: `${pct}%`, backgroundColor: goal.color }}
                     />
                   </div>
-                  <span className="w-10 text-right text-xs font-bold text-muted-foreground">{pct}%</span>
+                  <span className="w-10 shrink-0 text-right text-xs font-bold text-muted-foreground">{pct}%</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => openFunds(goal, 'deposit')}

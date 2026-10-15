@@ -43,12 +43,12 @@ export function TransactionDetailDialog({
               {category?.emoji ?? '💸'}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-base font-bold text-foreground">{transaction.title}</p>
+              <p className="break-words text-base font-bold text-foreground">{transaction.title}</p>
               <p className="text-sm text-muted-foreground">{category?.name ?? 'Sin categoría'}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
             <div className="rounded-2xl bg-muted/50 p-4">
               <p className="text-xs font-semibold text-muted-foreground">Monto</p>
               <p
@@ -76,9 +76,9 @@ export function TransactionDetailDialog({
               <p className="text-xs font-semibold text-muted-foreground">Detalle de productos</p>
               <ul className="flex flex-col gap-1.5 rounded-2xl border border-border p-3">
                 {transaction.products.map((product) => (
-                  <li key={product.id} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="truncate font-medium text-foreground">{product.name}</span>
-                    <span className="shrink-0 font-semibold text-muted-foreground">
+                  <li key={product.id} className="flex items-start justify-between gap-3 text-sm">
+                    <span className="min-w-0 break-words font-medium text-foreground">{product.name}</span>
+                    <span className="shrink-0 whitespace-nowrap font-semibold text-muted-foreground">
                       {formatMoney(product.price)}
                     </span>
                   </li>

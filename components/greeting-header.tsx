@@ -12,9 +12,9 @@ export function GreetingHeader() {
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div className="flex flex-col gap-1">
+      <div className="flex min-w-0 flex-col gap-1">
         <p className="text-sm font-medium capitalize text-muted-foreground">{monthLabel}</p>
-        <h1 className="font-display text-3xl font-extrabold tracking-tight text-balance sm:text-4xl">
+        <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance break-words min-[400px]:text-3xl sm:text-4xl">
           ¡Hola, {displayName}! 👋
         </h1>
         <p className="max-w-md text-pretty text-sm text-muted-foreground">

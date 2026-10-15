@@ -92,7 +92,7 @@ function CategoriesContent() {
   return (
     <div className="min-h-screen">
       <DashboardNav />
-      <main className="px-4 pb-16 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pt-10">
+      <main className="px-3 pb-16 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pt-10">
         <div className="mx-auto flex max-w-5xl flex-col gap-6">
           {error && <ErrorBanner message={error} />}
 
@@ -193,7 +193,7 @@ function CategoriesContent() {
                           {category.emoji}
                         </span>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-foreground">{category.name}</p>
+                          <p className="break-words text-sm font-semibold text-foreground">{category.name}</p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <span
                               className={cn(

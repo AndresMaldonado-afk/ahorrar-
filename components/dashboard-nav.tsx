@@ -8,7 +8,7 @@ import {
   ArrowLeftRight,
   Tags,
   Target,
-  PieChart,
+  History,
   Settings,
   Menu,
   X,
@@ -25,8 +25,8 @@ const navItems = [
   { label: 'Inicio', icon: LayoutDashboard, href: '/' },
   { label: 'Categorías', icon: Tags, href: '/categorias' },
   { label: 'Movimientos', icon: ArrowLeftRight, href: '/movimientos' },
-  { label: 'Metas', icon: Target, href: '#' },
-  { label: 'Presupuesto', icon: PieChart, href: '#' },
+  { label: 'Metas', icon: Target, href: '/metas' },
+  { label: 'Historial', icon: History, href: '/historial' },
   { label: 'Ajustes', icon: Settings, href: '#' },
 ]
 

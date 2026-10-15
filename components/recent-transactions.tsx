@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Receipt } from 'lucide-react'
+import { ChevronDown, Plus, Receipt } from 'lucide-react'
 import { formatMoney, formatDate, signedAmount } from '@/lib/finance-data'
 import { useFinance } from '@/components/finance-provider'
 import { cn } from '@/lib/utils'
@@ -11,8 +11,8 @@ export function RecentTransactions() {
   const [expanded, setExpanded] = useState<string | null>(null)
 
   return (
-    <section className="flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex items-center justify-between">
+    <section className="flex min-w-0 flex-col gap-5 rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-lg font-bold">Movimientos recientes</h2>
           <p className="text-sm text-muted-foreground">Tu actividad de los últimos días</p>
@@ -20,9 +20,10 @@ export function RecentTransactions() {
         <button
           type="button"
           onClick={() => setNewMovementOpen(true)}
-          className="text-sm font-semibold text-primary hover:underline"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
+          aria-label="Nuevo movimiento"
         >
-          + Nuevo
+          <Plus className="size-4.5" aria-hidden="true" />
         </button>
       </div>
 
@@ -37,23 +38,23 @@ export function RecentTransactions() {
             const isOpen = expanded === t.id
             return (
               <li key={t.id} className="py-3 first:pt-0 last:pb-0">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <span
-                      className="flex size-10 items-center justify-center rounded-2xl bg-secondary text-lg"
+                      className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-secondary text-lg"
                       aria-hidden="true"
                     >
                       {category?.emoji ?? (isIncome ? '💰' : '🧾')}
                     </span>
-                    <div>
-                      <p className="text-sm font-semibold">{t.title}</p>
-                      <p className="text-xs text-muted-foreground">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold break-words">{t.title}</p>
+                      <p className="text-xs text-muted-foreground break-words">
                         {category ? `${category.emoji} ${category.name}` : 'Sin categoría'} · {formatDate(t.date)}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={isIncome ? 'text-sm font-bold text-primary' : 'text-sm font-bold text-accent'}>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className={isIncome ? 'whitespace-nowrap text-sm font-bold text-primary' : 'whitespace-nowrap text-sm font-bold text-accent'}>
                       {formatMoney(signedAmount(t), true)}
                     </span>
                     {hasProducts && (
@@ -71,16 +72,16 @@ export function RecentTransactions() {
                 </div>
 
                 {hasProducts && isOpen && (
-                  <div className="mt-3 ml-13 flex flex-col gap-1.5 rounded-2xl bg-muted/50 p-3">
+                  <div className="mt-3 flex flex-col gap-1.5 rounded-2xl bg-muted/50 p-3 sm:ml-13">
                     <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                       <Receipt className="size-3.5" aria-hidden="true" />
                       Detalle de productos
                     </p>
                     <ul className="flex flex-col gap-1">
                       {t.products!.map((p) => (
-                        <li key={p.id} className="flex items-center justify-between text-sm">
-                          <span className="text-foreground">{p.name}</span>
-                          <span className="font-medium text-muted-foreground">{formatMoney(p.price)}</span>
+                        <li key={p.id} className="flex items-start justify-between gap-3 text-sm">
+                          <span className="min-w-0 break-words text-foreground">{p.name}</span>
+                          <span className="shrink-0 whitespace-nowrap font-medium text-muted-foreground">{formatMoney(p.price)}</span>
                         </li>
                       ))}
                     </ul>

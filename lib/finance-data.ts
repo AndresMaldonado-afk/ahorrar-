@@ -18,8 +18,71 @@ export function formatDate(iso: string) {
   return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' }).format(date)
 }
 
+/** Local calendar date as YYYY-MM-DD (avoids the UTC shift of toISOString). */
+export function localISO(date: Date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+  return localISO()
+}
+
+/** Month key in YYYY-MM format. */
+export function currentMonthKey() {
+  return localISO().slice(0, 7)
+}
+
+export function monthKeyOf(iso: string) {
+  return iso.slice(0, 7)
+}
+
+/** The `count` month keys ending at `endKey`, oldest first. */
+export function lastMonthKeys(endKey: string, count: number) {
+  const [year, month] = endKey.split('-').map(Number)
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(year, month - 1 - (count - 1 - i), 1)
+    return localISO(d).slice(0, 7)
+  })
+}
+
+function capitalize(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+/** "Octubre 2026" */
+export function monthLabel(key: string) {
+  const [year, month] = key.split('-').map(Number)
+  const name = new Intl.DateTimeFormat('es-MX', { month: 'long' }).format(new Date(year, month - 1, 1))
+  return `${capitalize(name)} ${year}`
+}
+
+/** "Oct" */
+export function monthShort(key: string) {
+  const [year, month] = key.split('-').map(Number)
+  const name = new Intl.DateTimeFormat('es-MX', { month: 'short' })
+    .format(new Date(year, month - 1, 1))
+    .replace('.', '')
+  return capitalize(name)
+}
+
+/** One entry of the savings ledger: money moved into (+) or out of (-) goals. */
+export type GoalContribution = {
+  id: string
+  goalId: string | null
+  title: string
+  amount: number
+  date: string
+}
+
+export type MonthlyStat = {
+  key: string
+  label: string
+  income: number
+  expenses: number
+  saved: number
 }
 
 /** Palette used when the user creates a new category. */
@@ -110,15 +173,6 @@ function offsetISO(daysAgo: number) {
   return d.toISOString().slice(0, 10)
 }
 
-export const cashflow = [
-  { month: 'Abr', income: 28000, expenses: 21000 },
-  { month: 'May', income: 30000, expenses: 22500 },
-  { month: 'Jun', income: 29500, expenses: 20000 },
-  { month: 'Jul', income: 31000, expenses: 19000 },
-  { month: 'Ago', income: 30500, expenses: 21500 },
-  { month: 'Sep', income: 32000, expenses: 19750 },
-]
-
 export type Goal = {
   id: string
   name: string
@@ -127,21 +181,38 @@ export type Goal = {
   saved: number
   /** Amount persisted in the database; only meaningful for manual goals. */
   storedSaved: number
-  /** Auto goals share the unlocked savings equally; manual goals keep their fixed amount. */
+  /** Auto goals share the unlocked savings (equally or by percentage); manual goals keep their fixed amount. */
   isAuto: boolean
+  /** Last amount the user fixed by hand; remembered while the goal is auto and restored when it goes back to manual. */
+  manualAmount: number | null
+  /** Share of the unlocked savings (0-100) used when the distribution mode is "percent". */
+  percentage: number
   target: number
   /** ISO date (YYYY-MM-DD) or null when the goal has no deadline. */
   deadline: string | null
   color: string
 }
 
-type DistributableGoal = Pick<Goal, 'id' | 'isAuto' | 'storedSaved' | 'target'>
+export type DistributionMode = 'equal' | 'percent'
+
+type DistributableGoal = Pick<Goal, 'id' | 'isAuto' | 'storedSaved' | 'target' | 'percentage'>
+
+/** Sum of the percentages assigned to auto goals (manual goals are locked and do not take a share). */
+export function autoPercentSum(goals: Pick<Goal, 'isAuto' | 'percentage'>[]) {
+  return Math.round(goals.filter((g) => g.isAuto).reduce((s, g) => s + g.percentage, 0) * 100) / 100
+}
 
 /**
- * Manual goals keep their fixed amount. Whatever savings remain are split equally (1/N) among
- * auto goals; a goal never receives more than its target, and the excess flows to the rest.
+ * Manual goals keep their fixed amount. Whatever savings remain are shared among auto goals:
+ * - "equal": split equally (1/N); a goal never receives more than its target and the excess flows to the rest.
+ * - "percent": each goal gets its percentage of the remaining savings (capped at its target).
+ *   If the percentages add up to more than 100 they are scaled down so nothing is over-allocated.
  */
-export function distributeGoals(goals: DistributableGoal[], totalSavings: number) {
+export function distributeGoals(
+  goals: DistributableGoal[],
+  totalSavings: number,
+  mode: DistributionMode = 'equal',
+) {
   const amounts = new Map<string, number>()
   let manualSum = 0
   for (const goal of goals) {
@@ -154,6 +225,19 @@ export function distributeGoals(goals: DistributableGoal[], totalSavings: number
   }
 
   let pool = Math.max(0, totalSavings - manualSum)
+
+  if (mode === 'percent') {
+    const sum = goals.filter((g) => g.isAuto).reduce((s, g) => s + g.percentage, 0)
+    const scale = sum > 100 ? 100 / sum : 1
+    for (const goal of goals) {
+      if (!goal.isAuto) continue
+      const share = (pool * goal.percentage * scale) / 100
+      const amount = goal.target > 0 ? Math.min(goal.target, share) : 0
+      amounts.set(goal.id, Math.floor(amount * 100) / 100)
+    }
+    return { amounts, manualSum: roundMoney(manualSum) }
+  }
+
   let pending = goals.filter((g) => g.isAuto && g.target > 0)
 
   while (pending.length > 0 && pool > 0.004) {
