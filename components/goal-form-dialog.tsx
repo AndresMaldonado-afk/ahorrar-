@@ -308,9 +308,9 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
               disabled={targetValue <= 0}
               onChange={(e) => handlePercent(Number(e.target.value))}
               aria-label="Porcentaje del objetivo asignado"
-              className="flex-1 accent-primary disabled:opacity-50"
+              className="min-w-0 flex-1 accent-primary disabled:opacity-50"
             />
-            <span className="w-10 text-right text-xs font-bold text-muted-foreground">{pct}%</span>
+            <span className="w-12 shrink-0 text-right text-xs font-bold text-muted-foreground">{pct}%</span>
           </div>
 
           {plan.kind === 'impossible' && (
@@ -340,11 +340,11 @@ export function GoalFormDialog({ open, onClose, goal }: { open: boolean; onClose
                   {plan.adjustments.map((a) => {
                     const other = goals.find((g) => g.id === a.id)
                     return (
-                      <li key={a.id} className="flex justify-between gap-2">
-                        <span className="truncate">
+                      <li key={a.id} className="flex flex-col gap-0.5 min-[400px]:flex-row min-[400px]:justify-between min-[400px]:gap-2">
+                        <span className="min-w-0 break-words">
                           {other?.emoji} {other?.name}
                         </span>
-                        <span className="font-semibold text-foreground">
+                        <span className="font-semibold text-foreground min-[400px]:shrink-0 min-[400px]:whitespace-nowrap">
                           {formatMoney(a.from)} {'→'} {formatMoney(a.to)}
                         </span>
                       </li>

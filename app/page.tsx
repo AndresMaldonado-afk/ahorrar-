@@ -44,18 +44,18 @@ function Dashboard() {
   return (
     <div className="min-h-screen">
       <DashboardNav />
-      <main className="px-4 pb-16 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pt-10">
+      <main className="px-3 pb-16 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pt-10">
         <div className="mx-auto flex max-w-6xl flex-col gap-6">
           {error && <ErrorBanner message={error} />}
           <GreetingHeader />
           <BalanceCards />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="flex flex-col gap-6 lg:col-span-2">
+            <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
               <BudgetBreakdown />
               <HistorySection compact />
             </div>
-            <div className="flex flex-col gap-6">
+            <div className="flex min-w-0 flex-col gap-6">
               <GoalsSection linkToPage />
               <RecentTransactions />
             </div>

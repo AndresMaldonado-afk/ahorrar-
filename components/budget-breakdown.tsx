@@ -19,9 +19,9 @@ export function BudgetBreakdown() {
   const isExpense = tab === 'expense'
 
   return (
-    <section className="flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+    <section className="flex min-w-0 flex-col gap-5 rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 basis-40">
           <h2 className="font-display text-lg font-bold">Presupuesto por categoría</h2>
           <p className="text-sm text-muted-foreground">
             {isExpense ? 'Cómo se reparte tu gasto frente a tus límites' : 'Cuánto llevas recibido frente a tus metas'}
@@ -51,7 +51,7 @@ export function BudgetBreakdown() {
               aria-controls="budget-panel"
               onClick={() => setTab(value)}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
+                'flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold transition-colors sm:gap-2 sm:px-3',
                 selected
                   ? value === 'expense'
                     ? 'bg-accent text-accent-foreground shadow-sm'
@@ -86,14 +86,14 @@ export function BudgetBreakdown() {
 
 function RowHeader({ b, amountClass, suffix }: { b: DerivedBudget; amountClass: string; suffix: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 text-sm">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm">
       <span className="flex min-w-0 items-center gap-2 font-semibold">
         <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} aria-hidden="true" />
-        <span className="truncate">
+        <span className="break-words">
           {b.category.emoji} {b.category.name}
         </span>
       </span>
-      <span className="shrink-0 text-muted-foreground">
+      <span className="pl-4.5 text-muted-foreground sm:pl-0">
         <span className={cn('font-bold', amountClass)}>{formatMoney(b.spent)}</span>
         {suffix}
       </span>

@@ -68,13 +68,13 @@ export function HistorySection({ compact = false }: { compact?: boolean }) {
   const activeStat = monthlyStats.find((m) => m.key === activeMonth)
 
   return (
-    <section className="flex flex-col gap-6 rounded-3xl border border-border bg-card p-6 shadow-sm">
+    <section className="flex min-w-0 flex-col gap-6 rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-display text-lg font-bold">Historial</h2>
           <p className="text-sm text-muted-foreground">Ingresos, gastos y ahorro · últimos 6 meses</p>
         </div>
-        <ul className="flex items-center gap-4 text-xs font-medium">
+        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium">
           {legend.map((item) => (
             <li key={item.label} className="inline-flex items-center gap-1.5">
               <span className={cn('size-2.5 rounded-full', item.className)} aria-hidden="true" />
@@ -84,7 +84,7 @@ export function HistorySection({ compact = false }: { compact?: boolean }) {
         </ul>
       </div>
 
-      <div className="flex items-end justify-between gap-2 sm:gap-4">
+      <div className="flex items-end justify-between gap-0.5 sm:gap-4">
         {monthlyStats.map((m) => {
           const isActive = !compact && m.key === activeMonth
           const Wrapper = compact ? 'div' : 'button'
@@ -96,11 +96,11 @@ export function HistorySection({ compact = false }: { compact?: boolean }) {
                 : { type: 'button' as const, onClick: () => setSelected(m.key), 'aria-pressed': isActive })}
               aria-label={`${monthLabel(m.key)}: ingresos ${formatMoney(m.income)}, gastos ${formatMoney(m.expenses)}, ahorrado ${formatMoney(m.saved)}`}
               className={cn(
-                'flex flex-1 flex-col items-center gap-2 rounded-2xl px-1 pb-2 pt-3 transition-colors',
+                'flex min-w-0 flex-1 flex-col items-center gap-2 rounded-2xl px-0.5 pb-2 pt-3 transition-colors sm:px-1',
                 isActive ? 'bg-secondary' : !compact && 'hover:bg-muted/60',
               )}
             >
-              <div className="flex h-40 w-full items-end justify-center gap-1">
+              <div className="flex h-40 w-full items-end justify-center gap-0.5 sm:gap-1">
                 {[
                   { value: m.income, className: 'bg-chart-1', name: 'Ingresos' },
                   { value: m.expenses, className: 'bg-chart-2', name: 'Gastos' },
@@ -108,7 +108,7 @@ export function HistorySection({ compact = false }: { compact?: boolean }) {
                 ].map((bar) => (
                   <div
                     key={bar.name}
-                    className={cn('w-full max-w-3 rounded-t-md transition-all duration-500', bar.className)}
+                    className={cn('w-full max-w-2 rounded-t-sm transition-all duration-500 sm:max-w-3 sm:rounded-t-md', bar.className)}
                     style={{ height: `${Math.max((bar.value / max) * 100, bar.value > 0 ? 3 : 0)}%` }}
                     title={`${bar.name}: ${formatMoney(bar.value)}`}
                   />
@@ -149,16 +149,16 @@ export function HistorySection({ compact = false }: { compact?: boolean }) {
         </div>
 
         {activeStat && (
-          <dl className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl bg-secondary/60 p-2.5">
+          <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:text-center">
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-secondary/60 p-2.5 sm:block">
               <dt className="text-xs text-muted-foreground">Ingresos</dt>
               <dd className="text-sm font-bold text-primary">{formatMoney(activeStat.income)}</dd>
             </div>
-            <div className="rounded-2xl bg-accent/10 p-2.5">
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-accent/10 p-2.5 sm:block">
               <dt className="text-xs text-muted-foreground">Gastos</dt>
               <dd className="text-sm font-bold text-accent">{formatMoney(activeStat.expenses)}</dd>
             </div>
-            <div className="rounded-2xl bg-muted p-2.5">
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted p-2.5 sm:block">
               <dt className="text-xs text-muted-foreground">Ahorrado</dt>
               <dd className="text-sm font-bold">{formatMoney(activeStat.saved)}</dd>
             </div>
@@ -172,7 +172,7 @@ export function HistorySection({ compact = false }: { compact?: boolean }) {
         ) : (
           <ul className="flex max-h-80 flex-col divide-y divide-border overflow-y-auto pr-1">
             {entries.map((entry) => (
-              <li key={entry.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <li key={entry.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="flex min-w-0 items-center gap-3">
                   <span
                     className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-secondary text-lg"
@@ -181,15 +181,15 @@ export function HistorySection({ compact = false }: { compact?: boolean }) {
                     {entry.kind === 'goal' ? <PiggyBank className="size-5 text-chart-3" /> : entry.emoji}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold">{entry.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="text-sm font-semibold break-words">{entry.title}</p>
+                    <p className="text-xs text-muted-foreground break-words">
                       {entry.subtitle} · {formatDate(entry.date)}
                     </p>
                   </div>
                 </div>
                 <span
                   className={cn(
-                    'shrink-0 text-sm font-bold',
+                    'shrink-0 whitespace-nowrap text-sm font-bold',
                     entry.kind === 'income' && 'text-primary',
                     entry.kind === 'expense' && 'text-accent',
                     entry.kind === 'goal' && 'text-foreground',

@@ -49,7 +49,7 @@ export function GoalPercentPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-border px-4 py-3">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border px-3 py-3 sm:px-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold">Porcentaje por meta</p>
         <button
@@ -62,15 +62,18 @@ export function GoalPercentPanel() {
         </button>
       </div>
 
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-3">
         {autoGoals.map((goal) => (
-          <li key={goal.id} className="flex items-center justify-between gap-3">
-            <label htmlFor={`pct-${goal.id}`} className="flex min-w-0 items-center gap-2 text-sm">
+          <li
+            key={goal.id}
+            className="flex flex-col gap-1.5 border-b border-border pb-3 last:border-b-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:border-b-0 sm:pb-0"
+          >
+            <label htmlFor={`pct-${goal.id}`} className="flex min-w-0 items-start gap-2 text-sm">
               <span aria-hidden="true">{goal.emoji}</span>
-              <span className="truncate font-medium">{goal.name}</span>
+              <span className="font-medium break-words">{goal.name}</span>
             </label>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="text-xs text-muted-foreground">{formatMoney(goal.saved)}</span>
+            <div className="flex items-center justify-between gap-2 sm:shrink-0 sm:justify-end">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">{formatMoney(goal.saved)}</span>
               <div className="relative">
                 <input
                   id={`pct-${goal.id}`}

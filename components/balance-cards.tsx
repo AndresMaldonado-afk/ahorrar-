@@ -36,7 +36,7 @@ export function BalanceCards() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 min-[460px]:grid-cols-2 sm:gap-4 lg:grid-cols-3">
         {cards.map((card, index) => {
           const positiveTrend = card.up
           return (
@@ -44,12 +44,12 @@ export function BalanceCards() {
               key={card.label}
               className={[
                 card.highlight
-                  ? 'flex flex-col gap-3 rounded-3xl bg-primary p-5 text-primary-foreground shadow-sm'
-                  : 'flex flex-col gap-3 rounded-3xl border border-border bg-card p-5 shadow-sm',
-                index === 0 ? 'col-span-2 lg:col-span-1' : '',
+                  ? 'flex min-w-0 flex-col gap-3 rounded-3xl bg-primary p-4 text-primary-foreground shadow-sm sm:p-5'
+                  : 'flex min-w-0 flex-col gap-3 rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-5',
+                index === 0 ? 'min-[460px]:col-span-2 lg:col-span-1' : '',
               ].join(' ')}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span
                   className={
                     card.highlight
@@ -84,7 +84,7 @@ export function BalanceCards() {
                 >
                   {card.label}
                 </p>
-                <p className="font-display text-2xl font-extrabold tracking-tight">
+                <p className="font-display text-2xl font-extrabold tracking-tight break-words">
                   {formatMoney(card.value)}
                 </p>
               </div>
@@ -109,21 +109,21 @@ function SavedCard() {
   return (
     <section
       aria-label="Ahorrado"
-      className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-5 shadow-sm"
+      className="flex min-w-0 flex-col gap-4 rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
             <PiggyBank className="size-4.5" aria-hidden="true" />
           </span>
-          <div className="flex flex-col gap-0.5">
+          <div className="flex min-w-0 flex-col gap-0.5">
             <p className="text-sm text-muted-foreground">Ahorrado</p>
-            <p className="font-display text-2xl font-extrabold tracking-tight">
+            <p className="font-display text-2xl font-extrabold tracking-tight break-words">
               {formatMoney(fund)}
             </p>
           </div>
         </div>
-        <span className="rounded-full bg-secondary px-2 py-1 text-xs font-semibold text-secondary-foreground">
+        <span className="shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-semibold text-secondary-foreground">
           100%
         </span>
       </div>
@@ -150,7 +150,7 @@ function SavedCard() {
             Disponible / Libre
           </dt>
           <dd className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <span className="font-display text-lg font-bold">{formatMoney(available)}</span>
+            <span className="font-display text-lg font-bold break-words">{formatMoney(available)}</span>
             <span className="text-sm font-semibold text-primary">+ {availablePct}% Disponible</span>
           </dd>
         </div>
@@ -160,7 +160,7 @@ function SavedCard() {
             Destinado a Metas
           </dt>
           <dd className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <span className="font-display text-lg font-bold">{formatMoney(inGoals)}</span>
+            <span className="font-display text-lg font-bold break-words">{formatMoney(inGoals)}</span>
             <span className="text-sm font-semibold text-accent">- {goalsPct}% En Metas</span>
           </dd>
         </div>
