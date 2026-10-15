@@ -172,20 +172,13 @@ export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
         </p>
       )}
 
-      <dl className="grid grid-cols-1 gap-2 rounded-2xl bg-muted/60 p-3 sm:grid-cols-3 sm:text-center">
+      <dl className="grid grid-cols-1 gap-2 rounded-2xl bg-muted/60 p-3 sm:grid-cols-2 sm:text-center">
         <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5">
-          <dt className="text-xs text-muted-foreground">Dinero total</dt>
-          <dd className={cn('text-sm font-bold', savings.total < 0 && 'text-accent')}>
-            {savings.total < 0 ? '-' : ''}
-            {formatMoney(savings.total)}
-          </dd>
+          <dt className="text-xs text-muted-foreground">Ahorro total</dt>
+          <dd className="text-sm font-bold">{formatMoney(Math.max(0, savings.allocated))}</dd>
         </div>
         <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5">
-          <dt className="text-xs text-muted-foreground">En metas</dt>
-          <dd className="text-sm font-bold">{formatMoney(savings.allocated)}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5">
-          <dt className="text-xs text-muted-foreground">Balance libre</dt>
+          <dt className="text-xs text-muted-foreground">Balance total</dt>
           <dd className={cn('text-sm font-bold', savings.free < 0 ? 'text-destructive' : 'text-primary')}>
             {savings.free < 0 ? '-' : ''}
             {formatMoney(savings.free)}
