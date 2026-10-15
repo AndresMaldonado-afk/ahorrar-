@@ -58,8 +58,6 @@ export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
     setFundsGoal(goal)
   }
 
-  const freeAvailable = Math.max(0, savings.free)
-
   return (
     <section id="metas" className="flex min-w-0 flex-col gap-5 rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
       <div className="flex items-center justify-between gap-3">
@@ -174,33 +172,27 @@ export function GoalsSection({ linkToPage = false }: { linkToPage?: boolean }) {
         </p>
       )}
 
-      <dl className="grid grid-cols-1 gap-2 rounded-2xl bg-muted/60 p-3 sm:grid-cols-3 sm:text-center">
+      <dl className="grid grid-cols-1 gap-2 rounded-2xl bg-muted/60 p-3 sm:grid-cols-2 sm:text-center">
         <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5">
           <dt className="text-xs text-muted-foreground">Ahorro total</dt>
-          <dd className={cn('text-sm font-bold', savings.total < 0 && 'text-accent')}>
-            {savings.total < 0 ? '-' : ''}
-            {formatMoney(savings.total)}
-          </dd>
+          <dd className="text-sm font-bold">{formatMoney(Math.max(0, savings.allocated))}</dd>
         </div>
         <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5">
-          <dt className="text-xs text-muted-foreground">En metas</dt>
-          <dd className="text-sm font-bold">{formatMoney(savings.allocated)}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5">
-          <dt className="text-xs text-muted-foreground">Libre</dt>
-          <dd className={cn('text-sm font-bold', savings.overfunded > 0 ? 'text-accent' : 'text-primary')}>
-            {formatMoney(freeAvailable)}
+          <dt className="text-xs text-muted-foreground">Balance total</dt>
+          <dd className={cn('text-sm font-bold', savings.free < 0 ? 'text-destructive' : 'text-primary')}>
+            {savings.free < 0 ? '-' : ''}
+            {formatMoney(savings.free)}
           </dd>
         </div>
       </dl>
 
-      {savings.overfunded > 0 && (
-        <div className="flex gap-3 rounded-2xl bg-accent/12 p-3.5 text-accent" role="alert">
+      {savings.free < 0 && (
+        <div className="flex gap-3 rounded-2xl bg-destructive/12 p-3.5 text-destructive" role="alert">
           <AlertTriangle className="mt-0.5 size-4.5 shrink-0" aria-hidden="true" />
           <div className="flex flex-col gap-0.5">
-            <p className="text-sm font-semibold">Tus metas superan tu ahorro actual</p>
+            <p className="text-sm font-semibold">Tu balance total está en negativo</p>
             <p className="text-xs leading-relaxed text-foreground/80 text-pretty">
-              {`Tienes ${formatMoney(savings.allocated)} asignados pero tu ahorro total es de ${savings.total < 0 ? '-' : ''}${formatMoney(savings.total)}. Retira ${formatMoney(savings.overfunded)} de tus metas para cuadrar el fondo.`}
+              {`Tu balance es de -${formatMoney(savings.free)}. No puedes destinar dinero a tus metas hasta que vuelva a números positivos. Si lo necesitas, retira fondos de tus metas para recuperarlo.`}
             </p>
           </div>
         </div>

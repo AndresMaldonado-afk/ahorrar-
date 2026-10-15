@@ -167,6 +167,9 @@ type FinanceContextValue = {
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
 
+const negativeBalanceMessage =
+  'Tu balance total está en negativo. Solo puedes destinar dinero a tus metas cuando el balance sea positivo.'
+
 const emojiPool = ['🍽️', '🚗', '🏥', '🎓', '🎁', '🐶', '👕', '📱', '💰', '🧾']
 
 type CategoryRow = {
@@ -535,7 +538,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return { income, expenses, incomeCount: incomeTx.length, expenseCount: expenseTx.length }
   }, [monthTransactions])
 
-  const totalSavings = roundMoney(monthTotals.income - monthTotals.expenses)
+  // Money the user owns across every month: goals keep their amounts when a new month starts.
+  const totalSavings = useMemo(
+    () => roundMoney(transactions.reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0)),
+    [transactions],
+  )
 
   const { goals, manualSum } = useMemo(() => {
     const base = goalRows.map(mapGoal)
@@ -560,12 +567,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const autoDistribution = goals.length === 0 || goals.some((g) => g.isAuto)
 
-  // Balance total = (month income - month expenses) - money assigned to goals.
+  // Balance total = all income - all expenses - money assigned to goals. It can be negative.
   const summary = useMemo(() => {
     const { income, expenses } = monthTotals
     const saved = roundMoney(income - expenses)
     return {
-      balance: roundMoney(saved - savings.allocated),
+      balance: roundMoney(totalSavings - savings.allocated),
       income,
       expenses,
       saved,
@@ -573,7 +580,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       incomeCount: monthTotals.incomeCount,
       expenseCount: monthTotals.expenseCount,
     }
-  }, [monthTotals, savings.allocated])
+  }, [monthTotals, totalSavings, savings.allocated])
+
+  // The ledger adds up to what goals hold today; it is never reset by a new month.
+  const ledgerTotal = useMemo(
+    () => roundMoney(contributions.reduce((s, c) => s + c.amount, 0)),
+    [contributions],
+  )
 
   const monthlyStats = useMemo<MonthlyStat[]>(() => {
     return lastMonthKeys(monthKey, 6).map((key) => {
@@ -584,30 +597,27 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         if (t.type === 'income') income += t.amount
         else expenses += t.amount
       }
-      const ledger = contributions
+      let ledger = contributions
         .filter((c) => monthKeyOf(c.date) === key)
         .reduce((s, c) => s + c.amount, 0)
+      // The current month also counts changes the ledger has not recorded yet.
+      if (key === monthKey) ledger += savings.allocated - ledgerTotal
       return {
         key,
         label: monthShort(key),
         income: roundMoney(income),
         expenses: roundMoney(expenses),
-        saved: key === monthKey ? Math.max(0, savings.allocated) : Math.max(0, roundMoney(ledger)),
+        saved: Math.max(0, roundMoney(ledger)),
       }
     })
-  }, [transactions, contributions, monthKey, savings.allocated])
+  }, [transactions, contributions, monthKey, savings.allocated, ledgerTotal])
 
-  // Keeps the ledger of the current month equal to what is assigned to goals right now,
-  // so past months retain a snapshot of what was saved.
   const ledgerSyncing = useRef(false)
   const ledgerFailedSignature = useRef<string | null>(null)
-  const monthLedgerSum = roundMoney(
-    contributions.filter((c) => monthKeyOf(c.date) === monthKey).reduce((s, c) => s + c.amount, 0),
-  )
 
   useEffect(() => {
     if (loading || !user || ledgerSyncing.current) return
-    const delta = roundMoney(savings.allocated - monthLedgerSum)
+    const delta = roundMoney(savings.allocated - ledgerTotal)
     if (Math.abs(delta) < 0.01) {
       ledgerFailedSignature.current = null
       return
@@ -634,7 +644,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         }
         setContributions((prev) => [mapContribution(data as ContributionRow), ...prev])
       })
-  }, [loading, user, supabase, monthKey, monthLedgerSum, savings.allocated])
+  }, [loading, user, supabase, monthKey, ledgerTotal, savings.allocated])
 
   const persistGoalUpdates = async (updates: GoalUpdate[]) => {
     if (!user || updates.length === 0) return
@@ -671,6 +681,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       }
       return []
     }
+
+    const currentAmount = goals.find((g) => g.id === goalId)?.saved ?? 0
+    if (savings.free < -0.001 && input.saved > currentAmount + 0.001) throw new Error(negativeBalanceMessage)
 
     const manualGoals = goals.filter((g) => !g.isAuto)
     const plan = planGoalRebalance({
@@ -799,6 +812,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (!goal) throw new Error('No encontramos esa meta')
     const amount = roundMoney(delta)
     if (amount === 0) throw new Error('Escribe un monto mayor a 0')
+    if (amount > 0 && savings.free < -0.001) throw new Error(negativeBalanceMessage)
     const depositCap = maxDepositFor(goal)
     if (amount > 0 && amount > depositCap + 0.001) {
       throw new Error(`Solo puedes aportar hasta ${depositCap.toFixed(2)} a esta meta.`)

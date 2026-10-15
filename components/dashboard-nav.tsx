@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useFinance } from '@/components/finance-provider'
+import { SettingsDialog } from '@/components/settings-dialog'
 import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
@@ -27,7 +28,6 @@ const navItems = [
   { label: 'Movimientos', icon: ArrowLeftRight, href: '/movimientos' },
   { label: 'Metas', icon: Target, href: '/metas' },
   { label: 'Historial', icon: History, href: '/historial' },
-  { label: 'Ajustes', icon: Settings, href: '#' },
 ]
 
 function Brand() {
@@ -43,12 +43,12 @@ function Brand() {
   )
 }
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+function NavLinks({ onNavigate, onOpenSettings }: { onNavigate?: () => void; onOpenSettings: () => void }) {
   const pathname = usePathname()
   return (
     <nav className="flex flex-col gap-1.5" aria-label="Navegación principal">
       {navItems.map((item) => {
-        const active = item.href !== '#' && pathname === item.href
+        const active = pathname === item.href
         return (
           <Link
             key={item.label}
@@ -67,6 +67,14 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           </Link>
         )
       })}
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        className="flex items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <Settings className="size-5 shrink-0" aria-hidden="true" />
+        Ajustes
+      </button>
     </nav>
   )
 }
@@ -116,8 +124,14 @@ function UserSection({ email, onSignOut }: { email: string; onSignOut: () => voi
 
 export function DashboardNav() {
   const [open, setOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const { setNewMovementOpen, user } = useFinance()
   const router = useRouter()
+
+  const openSettings = () => {
+    setOpen(false)
+    setSettingsOpen(true)
+  }
 
   const openMovement = () => {
     setOpen(false)
@@ -138,7 +152,7 @@ export function DashboardNav() {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col justify-between border-r border-sidebar-border bg-sidebar p-5 lg:flex">
         <div className="flex flex-col gap-8">
           <Brand />
-          <NavLinks />
+          <NavLinks onOpenSettings={openSettings} />
         </div>
         <div className="flex flex-col gap-3">
           <NewMovementButton onClick={openMovement} />
@@ -182,7 +196,7 @@ export function DashboardNav() {
                   <X className="size-5" aria-hidden="true" />
                 </button>
               </div>
-              <NavLinks onNavigate={() => setOpen(false)} />
+              <NavLinks onNavigate={() => setOpen(false)} onOpenSettings={openSettings} />
             </div>
             <div className="flex flex-col gap-3">
               <NewMovementButton onClick={openMovement} />
@@ -192,6 +206,8 @@ export function DashboardNav() {
           </div>
         </div>
       )}
+
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   )
 }
